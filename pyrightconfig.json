@@ -1,0 +1,6 @@
+{
+  "include": ["backend"],
+  "venvPath": "/home/nate/.pyenv/versions",
+  "venv": "3.9.4",
+  "typeCheckingMode": "off"
+}
