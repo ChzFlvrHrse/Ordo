@@ -11,6 +11,8 @@ export function useAgent(onBooking?: () => void) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    console.log("UPDATED MESSAGES", messages);
+
     const sendMessage = useCallback(async (text: string) => {
         const userMessage: Message = { role: "user", content: text };
         const updatedMessages = [...messages, userMessage];
@@ -34,14 +36,25 @@ export function useAgent(onBooking?: () => void) {
             const data = await res.json();
             if (!data.success) throw new Error(data.error || "Agent error");
 
-            const assistantMessage: Message = {
-                role: "assistant",
-                content: data.message,
-            };
+            console.log("DATA", data);
 
-            setMessages(data.messages.filter((m: any) =>
-                typeof m.content === "string"
-            ));
+            const normalized: Message[] = data.messages
+                .filter((m: any) => {
+                    if (!Array.isArray(m.content)) return true;
+                    // drop tool_result turns
+                    if (m.content.some((b: any) => b.type === "tool_result")) return false;
+                    // drop assistant turns that are only tool_use with no text
+                    if (m.content.every((b: any) => b.type === "tool_use")) return false;
+                    return true;
+                })
+                .map((m: any) => ({
+                    role: m.role as Message["role"],
+                    content: Array.isArray(m.content)
+                        ? m.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("")
+                        : m.content,
+                }));
+
+            setMessages(normalized);
 
             // Trigger calendar refetch if agent likely made a booking change
             const lower = data.message.toLowerCase();
