@@ -1,4 +1,3 @@
-from __future__ import annotations
 import sqlite3, json, logging, hashlib
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,6 +19,7 @@ class OrdoDB:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA foreign_keys=ON")
         try:
             yield conn
             conn.commit()
@@ -64,8 +64,47 @@ class OrdoDB:
                     UNIQUE(app_id, user_id, provider)
                 );
 
+                CREATE TABLE IF NOT EXISTS events (
+                    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+                    app_id TEXT NOT NULL REFERENCES ordo_apps(id),
+                    user_id TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    description TEXT,
+                    start_time TEXT NOT NULL,
+                    end_time TEXT NOT NULL,
+                    timezone TEXT DEFAULT 'America/New_York',
+                    location TEXT,
+                    attendees TEXT,
+                    meet_link TEXT,
+                    status TEXT DEFAULT 'confirmed',
+                    created_at TEXT DEFAULT (datetime('now')),
+                    updated_at TEXT DEFAULT (datetime('now'))
+                );
+
+                CREATE TABLE IF NOT EXISTS event_provider_sync (
+                    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+                    event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+                    provider TEXT NOT NULL,
+                    provider_event_id TEXT NOT NULL,
+                    synced_at TEXT,
+                    sync_status TEXT DEFAULT 'pending',
+                    UNIQUE(event_id, provider)
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_integrations_app_user
                     ON calendar_integrations(app_id, user_id, provider);
+
+                CREATE INDEX IF NOT EXISTS idx_events_app_user
+                    ON events(app_id, user_id);
+
+                CREATE INDEX IF NOT EXISTS idx_events_start_time
+                    ON events(start_time);
+
+                CREATE INDEX IF NOT EXISTS idx_event_sync_event_id
+                    ON event_provider_sync(event_id);
+
+                CREATE INDEX IF NOT EXISTS idx_event_sync_provider_event_id
+                    ON event_provider_sync(provider, provider_event_id);
             """)
 
     # -------------------------
@@ -149,7 +188,6 @@ class OrdoDB:
             return self._deserialize_integration(dict(row)) if row else None
 
     def get_integrations(self, app_id: str, user_id: str) -> list[dict]:
-        """All providers for a given user within an app."""
         with self._conn() as conn:
             rows = conn.execute(
                 "SELECT * FROM calendar_integrations WHERE app_id = ? AND user_id = ?",
@@ -195,6 +233,125 @@ class OrdoDB:
         return row
 
     # -------------------------
+    # Events
+    # -------------------------
+
+    def create_event(self, app_id: str, user_id: str, title: str,
+                     start_time: str, end_time: str, **kwargs) -> dict:
+        if "attendees" in kwargs and isinstance(kwargs["attendees"], list):
+            kwargs["attendees"] = json.dumps(kwargs["attendees"])
+        kwargs["updated_at"] = datetime.now(timezone.utc).isoformat()
+        fields = ", ".join(kwargs.keys())
+        placeholders = ", ".join("?" * len(kwargs))
+        with self._conn() as conn:
+            conn.execute(
+                f"""INSERT INTO events (app_id, user_id, title, start_time, end_time, {fields})
+                    VALUES (?, ?, ?, ?, ?, {placeholders})""",
+                (app_id, user_id, title, start_time, end_time, *kwargs.values())
+            )
+            row = conn.execute(
+                "SELECT * FROM events WHERE app_id = ? AND user_id = ? AND title = ? AND start_time = ?",
+                (app_id, user_id, title, start_time)
+            ).fetchone()
+            return self._deserialize_event(dict(row))
+
+    def get_event(self, event_id: str) -> dict | None:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM events WHERE id = ?", (event_id,)
+            ).fetchone()
+            return self._deserialize_event(dict(row)) if row else None
+
+    def get_events(self, app_id: str, user_id: str,
+                   start: str = None, end: str = None) -> list[dict]:
+        query = "SELECT * FROM events WHERE app_id = ? AND user_id = ? AND status != 'cancelled'"
+        params = [app_id, user_id]
+        if start:
+            query += " AND start_time >= ?"
+            params.append(start)
+        if end:
+            query += " AND start_time <= ?"
+            params.append(end)
+        query += " ORDER BY start_time ASC"
+        with self._conn() as conn:
+            rows = conn.execute(query, params).fetchall()
+            return [self._deserialize_event(dict(r)) for r in rows]
+
+    def update_event(self, event_id: str, **kwargs) -> dict | None:
+        if "attendees" in kwargs and isinstance(kwargs["attendees"], list):
+            kwargs["attendees"] = json.dumps(kwargs["attendees"])
+        kwargs["updated_at"] = datetime.now(timezone.utc).isoformat()
+        sets = ", ".join(f"{k} = ?" for k in kwargs)
+        with self._conn() as conn:
+            conn.execute(
+                f"UPDATE events SET {sets} WHERE id = ?",
+                (*kwargs.values(), event_id)
+            )
+            row = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+            return self._deserialize_event(dict(row)) if row else None
+
+    def delete_event(self, event_id: str) -> bool:
+        with self._conn() as conn:
+            cur = conn.execute("DELETE FROM events WHERE id = ?", (event_id,))
+            return cur.rowcount > 0
+
+    def _deserialize_event(self, row: dict) -> dict:
+        if row.get("attendees") and isinstance(row["attendees"], str):
+            try:
+                row["attendees"] = json.loads(row["attendees"])
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return row
+
+    # -------------------------
+    # Event Provider Sync
+    # -------------------------
+
+    def upsert_event_sync(self, event_id: str, provider: str,
+                          provider_event_id: str, sync_status: str = "synced") -> dict:
+        synced_at = datetime.now(timezone.utc).isoformat()
+        with self._conn() as conn:
+            conn.execute(
+                """INSERT INTO event_provider_sync (event_id, provider, provider_event_id, synced_at, sync_status)
+                   VALUES (?, ?, ?, ?, ?)
+                   ON CONFLICT(event_id, provider) DO UPDATE SET
+                       provider_event_id = excluded.provider_event_id,
+                       synced_at = excluded.synced_at,
+                       sync_status = excluded.sync_status""",
+                (event_id, provider, provider_event_id, synced_at, sync_status)
+            )
+            row = conn.execute(
+                "SELECT * FROM event_provider_sync WHERE event_id = ? AND provider = ?",
+                (event_id, provider)
+            ).fetchone()
+            return dict(row)
+
+    def get_event_syncs(self, event_id: str) -> list[dict]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM event_provider_sync WHERE event_id = ?", (event_id,)
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_event_by_provider_id(self, provider: str, provider_event_id: str) -> dict | None:
+        with self._conn() as conn:
+            row = conn.execute(
+                """SELECT e.* FROM events e
+                   JOIN event_provider_sync s ON s.event_id = e.id
+                   WHERE s.provider = ? AND s.provider_event_id = ?""",
+                (provider, provider_event_id)
+            ).fetchone()
+            return self._deserialize_event(dict(row)) if row else None
+
+    def delete_event_sync(self, event_id: str, provider: str) -> bool:
+        with self._conn() as conn:
+            cur = conn.execute(
+                "DELETE FROM event_provider_sync WHERE event_id = ? AND provider = ?",
+                (event_id, provider)
+            )
+            return cur.rowcount > 0
+
+    # -------------------------
     # Dev helpers
     # -------------------------
 
@@ -202,22 +359,19 @@ class OrdoDB:
         """Drop and recreate all tables. Dev only."""
         with self._conn() as conn:
             conn.executescript("""
+                DROP TABLE IF EXISTS event_provider_sync;
+                DROP TABLE IF EXISTS events;
                 DROP TABLE IF EXISTS calendar_integrations;
                 DROP TABLE IF EXISTS ordo_apps;
             """)
         self._init_db()
 
-    def seed(
-        self,
-        name: str = "Ordo Dev",
-        api_key: str = "ordo_sk_7f3a91c2e84b56d0f2a7139e4c8b05d1",
-        redirect_uri: str = "http://localhost:5000/callback",
-    ):
+    def seed(self):
         """Insert test fixtures. Dev only."""
         app = self.create_app(
-            name=name,
-            api_key=api_key,
-            redirect_uri=redirect_uri,
+            name="Ordo Dev",
+            api_key="ordo_sk_7f3a91c2e84b56d0f2a7139e4c8b05d1",
+            redirect_uri="http://localhost:3000/callback",
             allowed_providers=["google"],
+            # webhook_url="http://localhost:8000/webhooks/ordo",
         )
-        return app

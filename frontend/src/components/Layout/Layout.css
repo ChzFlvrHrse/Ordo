@@ -1,42 +1,44 @@
 .layout {
     display: flex;
+    flex-direction: column;
     height: 100vh;
     width: 100vw;
     overflow: hidden;
-    background: #0a0c12;
+    background: #090b12;
+    /* padding: 24px; */
     user-select: none;
 }
 
-.layout--dragging {
-    cursor: col-resize;
+.layout-inner {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    border-radius: 0;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background:
+        radial-gradient(circle at top left, rgba(34, 211, 238, 0.14), transparent 26%),
+        radial-gradient(circle at top right, rgba(59, 130, 246, 0.12), transparent 24%),
+        linear-gradient(180deg, #11131d 0%, #0b0d14 100%);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
 }
 
 .layout-calendar {
-    height: 100%;
+    flex: 1;
     overflow: hidden;
-    flex-shrink: 0;
-}
-
-.layout-agent {
-    height: 100%;
-    overflow: hidden;
-    flex-shrink: 0;
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .layout-divider {
     width: 4px;
     height: 100%;
-    background: rgba(255, 255, 255, 0.04);
     cursor: col-resize;
-    display: flex;
-    align-items: center;
-    justify-content: center;
     flex-shrink: 0;
     transition: background 0.15s;
+    background: transparent;
 }
 
 .layout-divider:hover {
-    background: rgba(124, 58, 237, 0.3);
+    background: rgba(34, 211, 238, 0.2);
 }
 
 .layout-divider:hover .divider-handle {
@@ -47,7 +49,21 @@
     width: 2px;
     height: 40px;
     border-radius: 2px;
-    background: rgba(124, 58, 237, 0.6);
+    background: #22d3ee;
     opacity: 0;
     transition: opacity 0.15s;
+    margin: auto;
+}
+
+.layout-agent {
+    width: 28%;
+    min-width: 300px;
+    max-width: 420px;
+    height: 100%;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.layout--dragging {
+    cursor: col-resize;
 }

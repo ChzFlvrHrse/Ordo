@@ -5,6 +5,7 @@ __pycache__/
 *.pyd
 venv/
 .venv/
+test.py
 
 # Env
 .env
@@ -15,9 +16,12 @@ venv/
 
 # Node / React
 node_modules/
+.pnp
+.pnp.js
 .next/
 dist/
 build/
+coverage/
 .turbo/
 
 # Misc

@@ -53,11 +53,6 @@ async def callback():
 if __name__ == "__main__":
     from classes import OrdoDB
     db = OrdoDB()
-    # db.seed()
-    # db.reset()
-    # db.seed(
-    #     name="Ordo Dev",
-    #     api_key="ordo_sk_7f3a91c2e84b56d0f2a7139e4c8b05d1",
-    #     redirect_uri="http://localhost:5000/callback",
-    # )
+    db.reset()
+    db.seed()
     quart_app.run(host="0.0.0.0", port=5000)
