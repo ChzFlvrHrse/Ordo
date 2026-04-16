@@ -1,0 +1,186 @@
+.calendar-wrap {
+    position: relative;
+    height: 100%;
+    padding: 16px;
+    background: #0a0c12;
+    font-family: 'DM Sans', sans-serif;
+}
+
+.calendar-loading {
+    position: absolute;
+    top: 20px;
+    right: 24px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.35);
+    z-index: 10;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+/* FullCalendar overrides */
+.fc {
+    height: 100%;
+}
+
+.fc-theme-standard td,
+.fc-theme-standard th,
+.fc-theme-standard .fc-scrollgrid {
+    border-color: rgba(255, 255, 255, 0.06);
+}
+
+.fc-col-header-cell {
+    padding: 10px 0;
+    background: transparent;
+}
+
+.fc-col-header-cell-cushion {
+    font-size: 11px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.4);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    text-decoration: none;
+}
+
+.fc-daygrid-day-number,
+.fc-timegrid-slot-label-cushion {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.3);
+    text-decoration: none;
+}
+
+.fc-day-today {
+    background: rgba(124, 58, 237, 0.05) !important;
+}
+
+.fc-day-today .fc-col-header-cell-cushion {
+    color: #a78bfa;
+}
+
+.fc-timegrid-now-indicator-line {
+    border-color: #7c3aed;
+}
+
+.fc-timegrid-now-indicator-arrow {
+    border-top-color: #7c3aed;
+    border-bottom-color: #7c3aed;
+}
+
+.fc-button {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    color: rgba(255, 255, 255, 0.6) !important;
+    font-size: 12px !important;
+    font-family: 'DM Sans', sans-serif !important;
+    font-weight: 400 !important;
+    border-radius: 7px !important;
+    padding: 5px 12px !important;
+    text-transform: none !important;
+    box-shadow: none !important;
+    transition: background 0.15s, color 0.15s !important;
+}
+
+.fc-button:hover {
+    background: rgba(255, 255, 255, 0.09) !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.fc-button-active,
+.fc-button-primary:not(:disabled).fc-button-active {
+    background: rgba(124, 58, 237, 0.25) !important;
+    border-color: rgba(124, 58, 237, 0.4) !important;
+    color: #a78bfa !important;
+}
+
+.fc-toolbar-title {
+    font-family: 'Sora', sans-serif !important;
+    font-size: 16px !important;
+    font-weight: 500 !important;
+    color: rgba(255, 255, 255, 0.85) !important;
+}
+
+.fc-event {
+    border: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+    cursor: pointer;
+}
+
+.fc-event:focus,
+.fc-event:focus-within {
+    box-shadow: none !important;
+}
+
+.cal-event-inner {
+    border-left: 3px solid;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 0 6px 6px 0;
+    padding: 3px 6px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    overflow: hidden;
+    transition: background 0.15s;
+}
+
+.cal-event-inner:hover {
+    background: rgba(255, 255, 255, 0.09);
+}
+
+.cal-event-title {
+    font-size: 11.5px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.85);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cal-event-time {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.fc-daygrid-event {
+    border-radius: 4px !important;
+}
+
+.fc-popover {
+    background: #1a1d2e !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-radius: 10px !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4) !important;
+}
+
+.fc-popover-header {
+    background: transparent !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+    color: rgba(255, 255, 255, 0.6) !important;
+    font-size: 11px !important;
+}
+
+.fc-popover-close {
+    color: rgba(255, 255, 255, 0.4) !important;
+}
+
+.fc-scrollgrid-section-header th {
+    background: #0a0c12;
+}
+
+.fc-timegrid-axis {
+    background: #0a0c12;
+}
+
+::-webkit-scrollbar {
+    width: 4px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 2px;
+}

@@ -16,6 +16,10 @@
     "module": "esnext",
     "moduleResolution": "node",
     "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@fullcalendar/*": ["./node_modules/@fullcalendar/*/index.d.ts"]
+    },
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx"
