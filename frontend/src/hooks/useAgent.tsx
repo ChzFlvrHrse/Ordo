@@ -11,8 +11,6 @@ export function useAgent(onBooking?: () => void) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    console.log("UPDATED MESSAGES", messages);
-
     const sendMessage = useCallback(async (text: string) => {
         const userMessage: Message = { role: "user", content: text };
         const updatedMessages = [...messages, userMessage];
