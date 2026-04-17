@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import toast from "react-hot-toast";
 import config from "../config";
 
 export interface Message {
@@ -58,10 +59,12 @@ export function useAgent(onBooking?: () => void) {
             const lower = data.message.toLowerCase();
             if (onBooking && (lower.includes("booked") || lower.includes("cancelled") || lower.includes("rescheduled"))) {
                 onBooking();
+                toast.success("Calendar updated");
             }
 
         } catch (e: any) {
             setError(e.message);
+            toast.error(e.message || "Agent failed to respond");
         } finally {
             setLoading(false);
         }

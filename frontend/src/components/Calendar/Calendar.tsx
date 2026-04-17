@@ -1,41 +1,32 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import { EventClickArg, EventContentArg } from "@fullcalendar/core";
-import { CheckCircle2, ChevronDown, Link2 } from "lucide-react";
+import { ChevronDown, Link2, Tag } from "lucide-react";
+import toast from "react-hot-toast";
 import { OrdoEvent } from "../../hooks/useEvents";
 import config from "../../config";
 import GoogleCalendarModal from "../../modal/GoogleCalendarModal/GoogleCalendarModal";
+import CalendarLabelsModal from "../../modal/CalendarLabelsModal/CalendarLabelsModal";
 import "./Calendar.css";
 
 interface CalendarProps {
   events: OrdoEvent[];
   loading: boolean;
   activeCalendars: any[];
+  refetch: () => Promise<void> | void;
 }
 
-const PROVIDER_COLORS: Record<string, string> = {
-  google: "google",
-  outlook: "outlook",
-  ordo: "ordo",
-  teli: "teli",
-};
-
 function renderEventContent(arg: EventContentArg) {
-  const provider = (arg.event.extendedProps.provider as string) || "ordo";
-  const barClass = PROVIDER_COLORS[provider] || "ordo";
-
+  const color = arg.event.extendedProps.color || "#22d3ee";
   return (
     <div className="cal-event-inner">
-      <div className={`cal-event-bar ${barClass}`} />
+      <div className="cal-event-bar" style={{ background: color }} />
       <div className="cal-event-content">
-        <div>
-          <div className="cal-event-title">{arg.event.title}</div>
-          {arg.timeText && <div className="cal-event-time">{arg.timeText}</div>}
-        </div>
-        <div className="cal-event-source">{provider}</div>
+        <div className="cal-event-title">{arg.event.title}</div>
+        {arg.timeText && <div className="cal-event-time">{arg.timeText}</div>}
       </div>
     </div>
   );
@@ -61,35 +52,110 @@ function ordoLogo() {
   );
 }
 
+function LabelLegend({
+  integrations,
+  activeLabelFilters,
+  toggleLabelFilter,
+}: {
+  integrations: any[];
+  activeLabelFilters: string[];
+  toggleLabelFilter: (label: string) => void;
+}) {
+  const legend = React.useMemo(() => {
+    const map = new Map();
+    integrations.forEach((integration) => {
+      const label = integration.label?.trim();
+      const color = integration.color;
+      if (!label || !color) return;
+      if (!map.has(label)) {
+        map.set(label, { label, color });
+      }
+    });
+    return Array.from(map.values());
+  }, [integrations]);
+
+  if (legend.length === 0) return null;
+
+  return (
+    <div className="label-legend-wrap">
+      <div className="label-legend-header">Filter by Label</div>
+      <div className="label-legend">
+        {legend.map((item) => (
+          <div
+            key={item.label}
+            onClick={() => toggleLabelFilter(item.label)}
+            className={`label-legend-item${activeLabelFilters.includes(item.label) ? " active" : ""}`}
+          >
+            <span className="label-legend-item-color" style={{ background: item.color }} />
+            <span className="label-legend-item-text">{item.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const VIEWS = ["Week", "Month", "Day"];
 
-export default function Calendar({ events, loading, activeCalendars }: CalendarProps) {
+export default function Calendar({ events, loading, activeCalendars, refetch }: CalendarProps) {
   const calendarRef = useRef<FullCalendar>(null);
-  const [activeView, setActiveView] = useState("Week");
-  const [showGoogleCalendar, setShowGoogleCalendar] = useState(false);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const connectionsMenuRef = useRef<HTMLDivElement | null>(null);
+
+  const [activeView, setActiveView] = useState("Month");
+  const [showAuthModal, setShowAuthModal] = useState<string | null>(null);
   const [googleCalendarLoading, setGoogleCalendarLoading] = useState(false);
   const [showConnectionsMenu, setShowConnectionsMenu] = useState(false);
+  const [providerConnections, setProviderConnections] = useState<Record<string, any[]>>({});
+  const [activeProvider, setActiveProvider] = useState<string | null>(null);
+  const [labelsLoading, setLabelsLoading] = useState(false);
+  const [activeLabelFilters, setActiveLabelFilters] = useState<string[]>([]);
 
-  const hasCalendarConnection = (provider: string) => {
-    return activeCalendars?.some((calendar) => {
-      const type = String(calendar?.type || calendar?.provider || calendar?.calendar_type || "")
-        .toLowerCase()
-        .trim();
-      return type.includes(provider.toLowerCase());
-    });
+  useEffect(() => {
+    const connections = activeCalendars.reduce((acc, calendar) => {
+      const key = String(calendar?.provider || "").toLowerCase().trim();
+      if (!key) return acc;
+      acc[key] = [...(acc[key] || []), calendar];
+      return acc;
+    }, {} as Record<string, any[]>);
+    setProviderConnections(connections);
+  }, [activeCalendars]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        setActiveProvider(null);
+      }
+      if (connectionsMenuRef.current && !connectionsMenuRef.current.contains(e.target as Node)) {
+        setShowConnectionsMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const toggleLabelFilter = (label: string) => {
+    setActiveLabelFilters(prev =>
+      prev.includes(label) ? prev.filter(l => l !== label) : [...prev, label]
+    );
   };
 
-  const googleConnected = hasCalendarConnection("google");
-  const outlookConnected = hasCalendarConnection("outlook");
-  const ordoConnected = true;
+  const googleConnected = (providerConnections.google || []).length > 0;
+  const outlookConnected = (providerConnections.outlook || []).length > 0;
 
-  const calendarEvents = events.map((e) => ({
+  const filteredEvents = activeLabelFilters.length === 0
+    ? events
+    : events.filter(e => e.label && activeLabelFilters.includes(e.label));
+
+  const calendarEvents = filteredEvents.map((e) => ({
     id: e.id,
     title: e.title,
     start: e.start,
     end: e.end,
     extendedProps: {
       provider: e.provider,
+      color: e.color,
+      label: e.label,
       location: e.location,
       description: e.description,
       attendees: e.attendees,
@@ -120,55 +186,103 @@ export default function Calendar({ events, loading, activeCalendars }: CalendarP
 
   const connectGoogleCalendar = async () => {
     setGoogleCalendarLoading(true);
-
-    const result = await fetch(`${config.apiBaseUrl}/google_calendar/connect`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-Key": config.apiKey,
-      },
-      body: JSON.stringify({
-        user_id: config.userId,
-      }),
-    });
-
-    const data = await result.json();
-
-    if (data.success && data?.auth_url) {
-      window.location.href = data.auth_url;
-    } else {
+    try {
+      const result = await fetch(`${config.apiBaseUrl}/google_calendar/connect`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-Key": config.apiKey,
+        },
+        body: JSON.stringify({ user_id: config.userId }),
+      });
+      const data = await result.json();
+      if (data.success && data?.auth_url) {
+        toast.loading("Redirecting to Google...");
+        window.location.href = data.auth_url;
+      } else {
+        toast.error(data.error || "Failed to start Google auth");
+        setGoogleCalendarLoading(false);
+      }
+    } catch (error) {
+      toast.error("Could not connect to Google Calendar");
       setGoogleCalendarLoading(false);
     }
   };
 
-  const openModalProvider = (provider: string) => {
+  const saveLabels = async (items: any[]) => {
+    setLabelsLoading(true);
+    try {
+      await Promise.all(
+        items.map(item =>
+          fetch(`${config.apiBaseUrl}/integrations/labels`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              "X-API-Key": config.apiKey,
+            },
+            body: JSON.stringify({
+              user_id: config.userId,
+              provider: item.provider,
+              email: item.email,
+              label: item.label?.trim(),
+              color: item.color,
+            }),
+          })
+        )
+      );
+      toast.success("Labels saved");
+      setShowAuthModal(null);
+      await refetch();
+    } catch (error) {
+      toast.error("Could not save labels");
+    } finally {
+      setLabelsLoading(false);
+    }
+  };
+
+  const openModalProvider = (provider: string, type: "oauth" | "connections") => {
+    if (type === "connections") {
+      setActiveProvider(provider);
+      return;
+    }
     switch (provider) {
       case "google":
-        setShowGoogleCalendar(true);
-        setShowConnectionsMenu(false);
+        setShowAuthModal("google");
+        setActiveProvider(null);
         break;
       case "outlook":
+        setActiveProvider(null);
         setShowConnectionsMenu(false);
         break;
       default:
         break;
     }
+    setShowConnectionsMenu(false);
   };
 
-  const connectionPills = [
-    { label: "Ordo", key: "ordo", connected: ordoConnected },
-    { label: "Google", key: "google", connected: googleConnected },
-    { label: "Outlook", key: "outlook", connected: outlookConnected },
-  ];
+  const connectionPills = ["ordo", "google", "outlook"];
+  const getProviderLabel = (provider: string) => provider.charAt(0).toUpperCase() + provider.slice(1);
+  const getInitials = (email: string) => email?.charAt(0)?.toUpperCase() || "?";
 
   return (
     <>
-      {showGoogleCalendar && (
+      {showAuthModal === "google" && (
         <GoogleCalendarModal
           loading={googleCalendarLoading}
-          onClose={() => setShowGoogleCalendar(false)}
+          onClose={() => setShowAuthModal(null)}
           onConnect={connectGoogleCalendar}
           connected={googleConnected}
+        />
+      )}
+
+      {showAuthModal === "labels" && (
+        <CalendarLabelsModal
+          integrations={activeCalendars}
+          loading={labelsLoading}
+          onClose={() => setShowAuthModal(null)}
+          onSave={async (items: any[]) => {
+            await saveLabels(items);
+          }}
         />
       )}
 
@@ -178,16 +292,7 @@ export default function Calendar({ events, loading, activeCalendars }: CalendarP
             <div className="calendar-logo-icon">
               {ordoLogo()}
               <div className="calendar-logo-sparkle">
-                <svg
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="#a5f3fc"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#a5f3fc" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 2L9.5 9.5 2 12l7.5 2.5L12 22l2.5-7.5L22 12l-7.5-2.5z" />
                 </svg>
               </div>
@@ -214,16 +319,7 @@ export default function Calendar({ events, loading, activeCalendars }: CalendarP
         <div className="calendar-toolbar">
           <div className="calendar-title-group">
             <span className="calendar-badge">
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M15 4V2M15 4V6M15 4H10.5M3 10V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19V10H3ZM3 10V6C3 4.9 3.9 4 5 4H7" />
                 <path d="M7 2V6" />
                 <path d="M21 10V6C21 4.9 20.1 4 19 4H18.5" />
@@ -242,20 +338,99 @@ export default function Calendar({ events, loading, activeCalendars }: CalendarP
 
         <div className="calendar-filters">
           <div className="calendar-connections-status">
-            {connectionPills.map(({ label, key, connected }) => (
-              <div
-                key={key}
-                className={`source-pill ${key} ${connected ? "connected" : "inactive"}`}
-              >
-                <span className={`source-dot ${key}`} />
-                {connected && <CheckCircle2 size={12} className="source-check" />}
-                {label}
-              </div>
-            ))}
+            {connectionPills.map((provider) => {
+              const connections =
+                provider === "ordo"
+                  ? [{ id: "ordo-system", email: "system@ordo" }]
+                  : providerConnections[provider] || [];
+              const connected = connections.length > 0;
+
+              return (
+                <div key={provider} className="source-pill-wrapper">
+                  <button
+                    type="button"
+                    className={`source-pill ${provider} ${connected ? "connected" : "inactive"}`}
+                    onClick={() => connected && setActiveProvider(activeProvider === provider ? null : provider)}
+                  >
+                    <span className={`source-dot ${provider}`} />
+                    {connected && connections.length > 0 && provider !== "ordo" && (
+                      <span className="source-count">{connections.length}</span>
+                    )}
+                    {getProviderLabel(provider)}
+                  </button>
+
+                  {activeProvider === provider && (
+                    <div ref={popoverRef} className="provider-popover">
+                      <div className="provider-popover-header">
+                        {getProviderLabel(provider)} accounts
+                      </div>
+                      <div className="provider-popover-list">
+                        {provider === "ordo" ? (
+                          <div className="provider-account-row">
+                            <div className="provider-account-left">
+                              <div className="provider-avatar">O</div>
+                              <div className="provider-account-email">Ordo system</div>
+                            </div>
+                            <div className="provider-account-status active">Active</div>
+                          </div>
+                        ) : (providerConnections[provider] || []).length === 0 ? (
+                          <div className="provider-empty">No accounts connected</div>
+                        ) : (
+                          (providerConnections[provider] || []).map((acct: any) => {
+                            const isExpired = acct.token_expiry
+                              ? new Date(acct.token_expiry) < new Date()
+                              : false;
+                            return (
+                              <div key={acct.id} className="provider-account-row">
+                                <div className="provider-account-left">
+                                  <div className="provider-avatar">{getInitials(acct.email)}</div>
+                                  <div className="provider-account-email">{acct.email}</div>
+                                </div>
+                                <div className={`provider-account-status ${isExpired ? "expired" : "active"}`}>
+                                  {isExpired ? "Expired" : "Active"}
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                      {provider !== "ordo" && (
+                        <div className="provider-popover-footer">
+                          <button
+                            className="provider-connect-btn"
+                            onClick={() => openModalProvider(provider, "oauth")}
+                          >
+                            Connect another
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
+          <LabelLegend
+            integrations={activeCalendars}
+            activeLabelFilters={activeLabelFilters}
+            toggleLabelFilter={toggleLabelFilter}
+          />
+
           <div className="calendar-actions">
-            <div className="connections-menu-wrap">
+            <div className="connections-menu-wrap" ref={connectionsMenuRef}>
+              <button
+                type="button"
+                className="oauth-action-btn labels-menu-btn"
+                onClick={() => {
+                  setShowAuthModal("labels");
+                  setShowConnectionsMenu(false);
+                  setActiveProvider(null);
+                }}
+              >
+                <Tag size={14} />
+                Labels
+              </button>
               <button
                 type="button"
                 className="oauth-action-btn"
@@ -268,26 +443,20 @@ export default function Calendar({ events, loading, activeCalendars }: CalendarP
 
               {showConnectionsMenu && (
                 <div className="connections-menu">
-                  {!googleConnected && (
-                    <button
-                      type="button"
-                      className="connections-menu-item"
-                      onClick={() => openModalProvider("google")}
-                    >
-                      Connect Google
-                    </button>
-                  )}
-
-                  {!outlookConnected && (
-                    <button
-                      type="button"
-                      className="connections-menu-item"
-                      onClick={() => openModalProvider("outlook")}
-                    >
-                      Connect Outlook
-                    </button>
-                  )}
-
+                  <button
+                    type="button"
+                    className="connections-menu-item"
+                    onClick={() => openModalProvider("google", "oauth")}
+                  >
+                    Connect Google
+                  </button>
+                  <button
+                    type="button"
+                    className="connections-menu-item"
+                    onClick={() => openModalProvider("outlook", "oauth")}
+                  >
+                    Connect Outlook
+                  </button>
                   {googleConnected && outlookConnected && (
                     <div className="connections-menu-empty">
                       All calendar providers connected
@@ -298,16 +467,7 @@ export default function Calendar({ events, loading, activeCalendars }: CalendarP
             </div>
 
             <div className="filter-pill">
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
               </svg>
               Filters
@@ -321,14 +481,14 @@ export default function Calendar({ events, loading, activeCalendars }: CalendarP
           <FullCalendar
             ref={calendarRef}
             plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-            initialView="timeGridWeek"
+            initialView="dayGridMonth"
             headerToolbar={false}
             events={calendarEvents}
             eventContent={renderEventContent}
             eventClick={handleEventClick}
             height="100%"
             nowIndicator
-            slotMinTime="0:00:00"
+            slotMinTime="06:00:00"
             slotMaxTime="22:00:00"
             allDaySlot={true}
             dayMaxEvents={3}

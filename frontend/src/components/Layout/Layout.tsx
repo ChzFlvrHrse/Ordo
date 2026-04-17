@@ -4,6 +4,7 @@ import AgentChat from "../AgentChat/AgentChat";
 import { useEvents } from "../../hooks/useEvents";
 import { useAgent } from "../../hooks/useAgent";
 import config from "../../config";
+import toast from "react-hot-toast";
 import "./Layout.css";
 
 export default function Layout() {
@@ -34,11 +35,10 @@ export default function Layout() {
       const data = await result.json();
       setActiveCalendars(data.calendars ?? []);
     } catch (error) {
-      console.error("[Layout] fetchActiveCalendars error:", error);
+      toast.error("Could not load calendar connections");
       setActiveCalendars([]);
     }
   };
-
 
   useEffect(() => {
     fetchActiveCalendars();
@@ -52,7 +52,12 @@ export default function Layout() {
     >
       <div className="layout-inner">
         <div className="layout-calendar">
-          <Calendar events={events} loading={eventsLoading} activeCalendars={activeCalendars} />
+          <Calendar
+            events={events}
+            loading={eventsLoading}
+            activeCalendars={activeCalendars}
+            refetch={fetchActiveCalendars}
+          />
         </div>
         <div className="layout-divider" onMouseDown={onMouseDown}>
           <div className="divider-handle" />

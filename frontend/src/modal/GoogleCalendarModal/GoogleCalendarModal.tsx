@@ -107,14 +107,10 @@ export default function GoogleCalendarModal({
                 <button
                     className="ordo-cta"
                     onClick={onConnect}
-                    disabled={loading || connected}
+                    disabled={loading}
                 >
                     {loading ? (
                         <div className="spinner" />
-                    ) : connected ? (
-                        <>
-                            <CheckCircle2 size={14} /> Connected
-                        </>
                     ) : (
                         <>
                             <GoogleLogo />
