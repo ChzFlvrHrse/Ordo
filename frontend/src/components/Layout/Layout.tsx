@@ -3,11 +3,13 @@ import Calendar from "../Calendar/Calendar";
 import AgentChat from "../AgentChat/AgentChat";
 import { useEvents } from "../../hooks/useEvents";
 import { useAgent } from "../../hooks/useAgent";
+import config from "../../config";
 import "./Layout.css";
 
 export default function Layout() {
   const { events, loading: eventsLoading, refetch } = useEvents();
   const { messages, loading: agentLoading, error, sendMessage } = useAgent(refetch);
+  const [activeCalendars, setActiveCalendars] = useState<any[]>([]);
   const [dragging, setDragging] = useState(false);
 
   const onMouseDown = useCallback(() => setDragging(true), []);
@@ -15,6 +17,32 @@ export default function Layout() {
     if (!dragging) return;
   }, [dragging]);
   const onMouseUp = useCallback(() => setDragging(false), []);
+
+  const fetchActiveCalendars = async () => {
+    try {
+      const result = await fetch(`${config.apiBaseUrl}/integrations/calendars?user_id=${config.userId}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-Key": config.apiKey,
+        }
+      });
+
+      if (!result.ok) {
+        return;
+      }
+      const data = await result.json();
+      setActiveCalendars(data.calendars ?? []);
+    } catch (error) {
+      console.error("[Layout] fetchActiveCalendars error:", error);
+      setActiveCalendars([]);
+    }
+  };
+
+
+  useEffect(() => {
+    fetchActiveCalendars();
+  }, []);
 
   return (
     <div
@@ -24,7 +52,7 @@ export default function Layout() {
     >
       <div className="layout-inner">
         <div className="layout-calendar">
-          <Calendar events={events} loading={eventsLoading} />
+          <Calendar events={events} loading={eventsLoading} activeCalendars={activeCalendars} />
         </div>
         <div className="layout-divider" onMouseDown={onMouseDown}>
           <div className="divider-handle" />
