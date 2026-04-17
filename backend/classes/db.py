@@ -47,7 +47,9 @@ class OrdoDB:
                     app_id TEXT NOT NULL REFERENCES ordo_apps(id),
                     user_id TEXT NOT NULL,
                     provider TEXT NOT NULL DEFAULT 'google',
-                    email TEXT,
+                    email TEXT NOT NULL,
+                    label TEXT,
+                    color TEXT DEFAULT '#22d3ee',
                     access_token TEXT,
                     refresh_token TEXT,
                     token_expiry TEXT,
@@ -61,7 +63,7 @@ class OrdoDB:
                     available_end TEXT,
                     created_at TEXT DEFAULT (datetime('now')),
                     updated_at TEXT DEFAULT (datetime('now')),
-                    UNIQUE(app_id, user_id, provider)
+                    UNIQUE(app_id, user_id, provider, email)
                 );
 
                 CREATE TABLE IF NOT EXISTS events (
@@ -93,6 +95,9 @@ class OrdoDB:
 
                 CREATE INDEX IF NOT EXISTS idx_integrations_app_user
                     ON calendar_integrations(app_id, user_id, provider);
+
+                CREATE INDEX IF NOT EXISTS idx_integrations_app_user_email
+                    ON calendar_integrations(app_id, user_id, provider, email);
 
                 CREATE INDEX IF NOT EXISTS idx_events_app_user
                     ON events(app_id, user_id);
@@ -153,7 +158,8 @@ class OrdoDB:
     # Calendar Integrations
     # -------------------------
 
-    def upsert_integration(self, app_id: str, user_id: str, provider: str, **kwargs) -> dict:
+    def upsert_integration(self, app_id: str, user_id: str, provider: str,
+                           email: str, **kwargs) -> dict:
         kwargs["updated_at"] = datetime.now(timezone.utc).isoformat()
         if "scopes" in kwargs and isinstance(kwargs["scopes"], list):
             kwargs["scopes"] = json.dumps(kwargs["scopes"])
@@ -166,46 +172,74 @@ class OrdoDB:
 
         with self._conn() as conn:
             conn.execute(
-                f"""INSERT INTO calendar_integrations (app_id, user_id, provider, {fields})
-                    VALUES (?, ?, ?, {placeholders})
-                    ON CONFLICT(app_id, user_id, provider) DO UPDATE SET {updates}""",
-                (app_id, user_id, provider, *kwargs.values())
+                f"""INSERT INTO calendar_integrations (app_id, user_id, provider, email, {fields})
+                    VALUES (?, ?, ?, ?, {placeholders})
+                    ON CONFLICT(app_id, user_id, provider, email) DO UPDATE SET {updates}""",
+                (app_id, user_id, provider, email, *kwargs.values())
             )
             row = conn.execute(
                 """SELECT * FROM calendar_integrations
-                   WHERE app_id = ? AND user_id = ? AND provider = ?""",
-                (app_id, user_id, provider)
+                   WHERE app_id = ? AND user_id = ? AND provider = ? AND email = ?""",
+                (app_id, user_id, provider, email)
             ).fetchone()
             return self._deserialize_integration(dict(row))
 
-    def get_integration(self, app_id: str, user_id: str, provider: str = "google") -> dict | None:
+    def get_integration(self, app_id: str, user_id: str, provider: str = "google",
+                        email: str = None) -> dict | None:
+        """Get a single integration. If email is provided, fetch that specific account."""
         with self._conn() as conn:
-            row = conn.execute(
-                """SELECT * FROM calendar_integrations
-                   WHERE app_id = ? AND user_id = ? AND provider = ?""",
-                (app_id, user_id, provider)
-            ).fetchone()
+            if email:
+                row = conn.execute(
+                    """SELECT * FROM calendar_integrations
+                       WHERE app_id = ? AND user_id = ? AND provider = ? AND email = ?""",
+                    (app_id, user_id, provider, email)
+                ).fetchone()
+            else:
+                # Return first match if no email specified
+                row = conn.execute(
+                    """SELECT * FROM calendar_integrations
+                       WHERE app_id = ? AND user_id = ? AND provider = ?
+                       ORDER BY created_at ASC LIMIT 1""",
+                    (app_id, user_id, provider)
+                ).fetchone()
             return self._deserialize_integration(dict(row)) if row else None
 
-    def get_integrations(self, app_id: str, user_id: str) -> list[dict]:
+    def get_integrations_by_provider(self, app_id: str, user_id: str,
+                                     provider: str) -> list[dict]:
+        """Get all accounts for a specific provider."""
         with self._conn() as conn:
             rows = conn.execute(
-                "SELECT * FROM calendar_integrations WHERE app_id = ? AND user_id = ?",
+                """SELECT * FROM calendar_integrations
+                   WHERE app_id = ? AND user_id = ? AND provider = ?
+                   ORDER BY created_at ASC""",
+                (app_id, user_id, provider)
+            ).fetchall()
+            return [self._deserialize_integration(dict(r)) for r in rows]
+
+    def get_integrations(self, app_id: str, user_id: str) -> list[dict]:
+        """Get all integrations across all providers for a user."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                """SELECT * FROM calendar_integrations
+                   WHERE app_id = ? AND user_id = ?
+                   ORDER BY provider, created_at ASC""",
                 (app_id, user_id)
             ).fetchall()
             return [self._deserialize_integration(dict(r)) for r in rows]
 
-    def delete_integration(self, app_id: str, user_id: str, provider: str = "google") -> bool:
+    def delete_integration(self, app_id: str, user_id: str, provider: str,
+                           email: str) -> bool:
+        """Delete a specific calendar account by email."""
         with self._conn() as conn:
             cur = conn.execute(
                 """DELETE FROM calendar_integrations
-                   WHERE app_id = ? AND user_id = ? AND provider = ?""",
-                (app_id, user_id, provider)
+                   WHERE app_id = ? AND user_id = ? AND provider = ? AND email = ?""",
+                (app_id, user_id, provider, email)
             )
             return cur.rowcount > 0
 
     def update_integration_config(self, app_id: str, user_id: str,
-                                   provider: str = "google", **kwargs) -> dict | None:
+                                   provider: str, email: str, **kwargs) -> dict | None:
         if "available_days" in kwargs and isinstance(kwargs["available_days"], list):
             kwargs["available_days"] = json.dumps(kwargs["available_days"])
         kwargs["updated_at"] = datetime.now(timezone.utc).isoformat()
@@ -213,13 +247,13 @@ class OrdoDB:
         with self._conn() as conn:
             conn.execute(
                 f"""UPDATE calendar_integrations SET {sets}
-                    WHERE app_id = ? AND user_id = ? AND provider = ?""",
-                (*kwargs.values(), app_id, user_id, provider)
+                    WHERE app_id = ? AND user_id = ? AND provider = ? AND email = ?""",
+                (*kwargs.values(), app_id, user_id, provider, email)
             )
             row = conn.execute(
                 """SELECT * FROM calendar_integrations
-                   WHERE app_id = ? AND user_id = ? AND provider = ?""",
-                (app_id, user_id, provider)
+                   WHERE app_id = ? AND user_id = ? AND provider = ? AND email = ?""",
+                (app_id, user_id, provider, email)
             ).fetchone()
             return self._deserialize_integration(dict(row)) if row else None
 
@@ -372,6 +406,6 @@ class OrdoDB:
             name="Ordo Dev",
             api_key="ordo_sk_7f3a91c2e84b56d0f2a7139e4c8b05d1",
             redirect_uri="http://localhost:3000/callback",
-            allowed_providers=["google"],
-            # webhook_url="http://localhost:8000/webhooks/ordo",
+            allowed_providers=["google", "outlook"],
         )
+        return app

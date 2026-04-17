@@ -15,22 +15,51 @@ Today is {today}.
 
 You are Ordo, an AI agent that manages calendar events on behalf of the user.
 
-You have access to the user's connected calendars. You can:
+{calendar_context}
+
+You can:
 - Retrieve upcoming events
 - Book new appointments
 - Cancel existing events
 - Reschedule existing events
 
 Always confirm details with the user before booking or making changes.
+When the user references a calendar by label (e.g. "work", "personal"), use the corresponding email.
 When presenting events, format dates and times in a human-readable way.
 Be concise and helpful. If you need more information to complete a request, ask for it.
 """
 
-def get_system_prompt(timezone: str = "America/New_York") -> str:
-    tz = pytz.timezone(timezone)
+def _build_calendar_context(integrations: list[dict]) -> str:
+    if not integrations:
+        return "The user has no calendars connected yet."
+
+    lines = ["The user has the following calendars connected:"]
+    for i in integrations:
+        label = i.get("label") or i.get("email")
+        email = i.get("email")
+        provider = i.get("provider").title()
+        color = i.get("color", "")
+        line = f'- "{label}" ({email}) — {provider}'
+        if color:
+            line += f" [{color}]"
+        lines.append(line)
+
+    return "\n".join(lines)
+
+def get_system_prompt(integrations: list[dict]) -> str:
+    # Use timezone from first integration or default
+    tz_name = "America/New_York"
+    for i in integrations:
+        if i.get("timezone"):
+            tz_name = i["timezone"]
+            break
+
+    tz = pytz.timezone(tz_name)
     now = datetime.now(tz)
     today = now.strftime("%A, %B %d, %Y")
-    return SYSTEM_PROMPT.format(today=today)
+    calendar_context = _build_calendar_context(integrations)
+
+    return SYSTEM_PROMPT.format(today=today, calendar_context=calendar_context)
 
 def _serialize_content(content: list) -> list:
     result = []
@@ -47,9 +76,8 @@ async def run_agent(app_id: str, user_id: str, messages: list[dict]) -> dict:
     messages: full conversation history as list of {"role": "user"|"assistant", "content": str|list}
     Returns the agent's text response and updated message history.
     """
-    integration = db.get_integration(app_id, user_id)
-    tz_name = (integration.get("timezone") or "America/New_York") if integration else "America/New_York"
-    system_prompt = get_system_prompt(tz_name)
+    integrations = db.get_integrations(app_id, user_id)
+    system_prompt = get_system_prompt(integrations)
 
     try:
         while True:

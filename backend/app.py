@@ -4,7 +4,7 @@ from quart import Quart
 from quart_cors import cors
 # from modal import App, Image, Secret, asgi_app, fastapi_endpoint, Period
 
-# Blueprints
+# Blueprint imports
 from api import (
     google_calendar_bp,
     agent_bp,

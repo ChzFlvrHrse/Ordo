@@ -1,14 +1,16 @@
-import os, logging
-from quart import Blueprint, request, jsonify
+import os
+import logging
 from functools import wraps
 from classes import OrdoDB
 from agent import run_agent
+from quart import Blueprint, request, jsonify
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 db = OrdoDB()
 agent_bp = Blueprint('agent', __name__, url_prefix='/agent')
+
 
 def require_api_key(f):
     @wraps(f)

@@ -44,8 +44,9 @@ def _credentials(integration: dict) -> google.oauth2.credentials.Credentials:
         scopes=integration.get("scopes"),
     )
 
-async def get_refreshed_credentials(app_id: str, user_id: str, provider: str = "google"):
-    integration = db.get_integration(app_id, user_id, provider)
+async def get_refreshed_credentials(app_id: str, user_id: str,
+                                     provider: str = "google", email: str = None):
+    integration = db.get_integration(app_id, user_id, provider, email=email)
     if not integration:
         raise ValueError(f"No {provider} calendar integration found for user {user_id}")
 
@@ -57,10 +58,11 @@ async def get_refreshed_credentials(app_id: str, user_id: str, provider: str = "
             app_id=app_id,
             user_id=user_id,
             provider=provider,
+            email=integration["email"],
             access_token=credentials.token,
             token_expiry=credentials.expiry.isoformat() if credentials.expiry else None,
         )
-        logger.info(f"=== ORDO: Refreshed token for app={app_id} user={user_id} provider={provider} ===")
+        logger.info(f"=== ORDO: Refreshed token app={app_id} user={user_id} email={integration['email']} ===")
 
     return credentials, integration
 
@@ -151,6 +153,7 @@ async def google_calendar_exchange():
             redirect_uri=post_exchange_uri,
         )
 
+        logger.info(f"=== ORDO: Connected google calendar app={app_id} user={user_id} email={email} ===")
         return redirect(post_exchange_uri)
 
     except Exception as e:
@@ -165,18 +168,19 @@ async def google_calendar_status():
         if not user_id:
             return jsonify({"error": "user_id is required"}), 400
 
-        integration = db.get_integration(request.ordo_app["id"], user_id, "google")
-        if integration:
-            integration = {k: integration[k] for k in (
-                "id", "email", "created_at", "provider",
-                "lookahead_weeks", "timezone", "available_days",
-                "available_start", "available_end"
-            ) if k in integration}
+        integrations = db.get_integrations_by_provider(request.ordo_app["id"], user_id, "google")
+        sanitized = [
+            {k: i[k] for k in ("id", "email", "created_at", "provider",
+                                "lookahead_weeks", "timezone", "available_days",
+                                "available_start", "available_end", "label", "color") if k in i}
+            for i in integrations
+        ]
 
         return jsonify({
-            "integration": integration,
+            "integrations": sanitized,
             "success": True,
-            "is_connected": integration is not None
+            "is_connected": len(sanitized) > 0,
+            "count": len(sanitized),
         })
 
     except Exception as e:
@@ -189,11 +193,18 @@ async def google_calendar_disconnect():
     try:
         data = await request.get_json()
         user_id = data.get("user_id")
+        email = data.get("email")
+
         if not user_id:
             return jsonify({"error": "user_id is required"}), 400
+        if not email:
+            return jsonify({"error": "email is required"}), 400
 
-        db.delete_integration(request.ordo_app["id"], user_id, "google")
-        return jsonify({"message": "Google Calendar disconnected", "success": True})
+        deleted = db.delete_integration(request.ordo_app["id"], user_id, "google", email)
+        if not deleted:
+            return jsonify({"error": "Integration not found"}), 404
+
+        return jsonify({"message": f"Google Calendar {email} disconnected", "success": True})
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -205,16 +216,18 @@ async def google_calendar_config():
     try:
         data = await request.get_json()
         user_id = data.get("user_id")
+        email = data.get("email")
         lookahead_weeks = data.get("lookahead_weeks")
         timezone = data.get("timezone")
 
-        if not user_id or not lookahead_weeks or not timezone:
-            return jsonify({"error": "user_id, lookahead_weeks, and timezone are required"}), 400
+        if not user_id or not email or not lookahead_weeks or not timezone:
+            return jsonify({"error": "user_id, email, lookahead_weeks, and timezone are required"}), 400
 
         integration = db.update_integration_config(
             app_id=request.ordo_app["id"],
             user_id=user_id,
             provider="google",
+            email=email,
             lookahead_weeks=lookahead_weeks,
             timezone=timezone,
             available_days=data.get("available_days"),
@@ -232,53 +245,88 @@ async def google_calendar_config():
 async def google_calendar_events():
     try:
         user_id = request.args.get("user_id")
+        email = request.args.get("email")  # optional — fetch specific account
+
         if not user_id:
             return jsonify({"error": "user_id is required"}), 400
 
-        logger.info(f"=== GOOGLE CALENDAR EVENTS: app={request.ordo_app['name']} user_id={user_id} ===")
+        logger.info(f"=== GOOGLE CALENDAR EVENTS: app={request.ordo_app['name']} user_id={user_id} email={email} ===")
 
-        credentials, integration = await get_refreshed_credentials(request.ordo_app["id"], user_id)
+        # If email specified, fetch that account only. Otherwise fetch all.
+        if email:
+            integrations = [db.get_integration(request.ordo_app["id"], user_id, "google", email=email)]
+            integrations = [i for i in integrations if i]
+        else:
+            integrations = db.get_integrations_by_provider(request.ordo_app["id"], user_id, "google")
 
-        calendar_id = integration.get("calendar_id")
-        if not calendar_id:
-            return jsonify({"error": "calendar_id missing from integration"}), 400
+        if not integrations:
+            return jsonify({"error": "No Google Calendar integration found"}), 404
 
-        tz_name = integration.get("timezone") or "America/New_York"
-        tz = pytz.timezone(tz_name)
-        now = datetime.now(tz)
-        end = now + timedelta(weeks=integration.get("lookahead_weeks") or 2)
+        all_events = []
 
-        service = build("calendar", "v3", credentials=credentials)
-        items = service.events().list(
-            calendarId=calendar_id,
-            timeMin=now.isoformat(),
-            timeMax=end.isoformat(),
-            singleEvents=True,
-            orderBy="startTime",
-        ).execute().get("items", [])
+        for integration in integrations:
+            try:
+                credentials, integration = await get_refreshed_credentials(
+                    request.ordo_app["id"], user_id, "google", email=integration["email"]
+                )
 
-        available_days = integration.get("available_days")
-        available_start = integration.get("available_start")
-        available_end = integration.get("available_end")
-
-        if available_days or available_start:
-            from datetime import time as time_type
-            filtered = []
-            for event in items:
-                dt_str = (event.get("start") or {}).get("dateTime") or (event.get("start") or {}).get("date")
-                if not dt_str:
+                calendar_id = integration.get("calendar_id")
+                if not calendar_id:
                     continue
-                dt = datetime.fromisoformat(dt_str).astimezone(tz)
-                if available_days and dt.isoweekday() not in available_days:
-                    continue
-                if available_start and available_end:
-                    t = dt.time().replace(tzinfo=None)
-                    if not (time_type.fromisoformat(available_start) <= t <= time_type.fromisoformat(available_end)):
-                        continue
-                filtered.append(event)
-            items = filtered
 
-        return jsonify({"events": items, "success": True})
+                tz_name = integration.get("timezone") or "America/New_York"
+                tz = pytz.timezone(tz_name)
+                now = datetime.now(tz)
+                end = now + timedelta(weeks=integration.get("lookahead_weeks") or 2)
+
+                service = build("calendar", "v3", credentials=credentials)
+                items = service.events().list(
+                    calendarId=calendar_id,
+                    timeMin=now.isoformat(),
+                    timeMax=end.isoformat(),
+                    singleEvents=True,
+                    orderBy="startTime",
+                ).execute().get("items", [])
+
+                # Tag each event with the account email
+                for item in items:
+                    item["_ordo_account"] = integration["email"]
+
+                available_days = integration.get("available_days")
+                available_start = integration.get("available_start")
+                available_end = integration.get("available_end")
+
+                if available_days or available_start:
+                    from datetime import time as time_type
+                    filtered = []
+                    for event in items:
+                        dt_str = (event.get("start") or {}).get("dateTime") or (event.get("start") or {}).get("date")
+                        if not dt_str:
+                            continue
+                        dt = datetime.fromisoformat(dt_str).astimezone(tz)
+                        if available_days and dt.isoweekday() not in available_days:
+                            continue
+                        if available_start and available_end:
+                            t = dt.time().replace(tzinfo=None)
+                            if not (time_type.fromisoformat(available_start) <= t <= time_type.fromisoformat(available_end)):
+                                continue
+                        filtered.append(event)
+                    items = filtered
+
+                all_events.extend(items)
+
+            except Exception as e:
+                logger.error(f"=== ORDO: Error fetching events for {integration.get('email')}: {e} ===")
+                continue
+
+        # Sort merged events by start time
+        def sort_key(e):
+            start = (e.get("start") or {}).get("dateTime") or (e.get("start") or {}).get("date") or ""
+            return start
+
+        all_events.sort(key=sort_key)
+
+        return jsonify({"events": all_events, "success": True, "count": len(all_events)})
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -292,6 +340,7 @@ async def google_calendar_book():
         args = data.get("args") or data
 
         user_id = args.get("user_id")
+        email = args.get("email")  # which Google account to book on
         title = args.get("title")
         start_time = args.get("start_time")
         end_time = args.get("end_time")
@@ -299,13 +348,15 @@ async def google_calendar_book():
         description = args.get("description")
         add_meet = args.get("add_meet", False)
 
-        logger.info(f"=== GOOGLE CALENDAR BOOK: app={request.ordo_app['name']} user_id={user_id} title={title} ===")
+        logger.info(f"=== GOOGLE CALENDAR BOOK: app={request.ordo_app['name']} user_id={user_id} email={email} title={title} ===")
 
         missing = [k for k, v in {"user_id": user_id, "title": title, "start_time": start_time, "end_time": end_time, "attendee_emails": attendee_emails}.items() if not v]
         if missing:
             return jsonify({"error": f"Missing required fields: {', '.join(missing)}", "success": False}), 400
 
-        credentials, integration = await get_refreshed_credentials(request.ordo_app["id"], user_id)
+        credentials, integration = await get_refreshed_credentials(
+            request.ordo_app["id"], user_id, "google", email=email
+        )
 
         tz_name = integration.get("timezone") or "America/New_York"
         event_body = {
@@ -347,12 +398,15 @@ async def google_calendar_cancel():
         data = await request.get_json()
         args = data.get("args") or data
         user_id = args.get("user_id")
+        email = args.get("email")
         event_id = args.get("event_id")
 
         if not user_id or not event_id:
             return jsonify({"error": "user_id and event_id are required"}), 400
 
-        credentials, integration = await get_refreshed_credentials(request.ordo_app["id"], user_id)
+        credentials, integration = await get_refreshed_credentials(
+            request.ordo_app["id"], user_id, "google", email=email
+        )
 
         service = build("calendar", "v3", credentials=credentials)
         service.events().delete(
@@ -374,6 +428,7 @@ async def google_calendar_reschedule():
         data = await request.get_json()
         args = data.get("args") or data
         user_id = args.get("user_id")
+        email = args.get("email")
         event_id = args.get("event_id")
         start_time = args.get("start_time")
         end_time = args.get("end_time")
@@ -381,7 +436,9 @@ async def google_calendar_reschedule():
         if not all([user_id, event_id, start_time, end_time]):
             return jsonify({"error": "user_id, event_id, start_time, end_time are required"}), 400
 
-        credentials, integration = await get_refreshed_credentials(request.ordo_app["id"], user_id)
+        credentials, integration = await get_refreshed_credentials(
+            request.ordo_app["id"], user_id, "google", email=email
+        )
 
         tz_name = integration.get("timezone") or "America/New_York"
         service = build("calendar", "v3", credentials=credentials)
