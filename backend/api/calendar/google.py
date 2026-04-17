@@ -97,7 +97,7 @@ async def google_calendar_connect():
             access_type="offline",
             include_granted_scopes="true",
             prompt="consent",
-            state=f"{request.ordo_app['id']}:{user_id}:{post_exchange_uri}",
+            state=f"{request.ordo_app['id']}:{user_id}:{post_exchange_uri}"
         )
         return jsonify({"auth_url": auth_url, "state": state, "success": True})
 
