@@ -264,29 +264,34 @@ export default function Calendar({
   const saveLabels = async (items: any[]) => {
     setLabelsLoading(true);
     try {
-      await Promise.all(
-        items.map((item) =>
-          fetch(`${config.apiBaseUrl}/integrations/labels`, {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-              "X-API-Key": config.apiKey,
-            },
-            body: JSON.stringify({
-              user_id: config.userId,
-              provider: item.provider,
-              email: item.email,
-              label: item.label?.trim(),
-              color: item.color,
-            }),
-          })
-        )
-      );
+      const res = await fetch(`${config.apiBaseUrl}/integrations/labels`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-Key": config.apiKey,
+        },
+        body: JSON.stringify({
+          user_id: config.userId,
+          labels: items.map((item) => ({
+            id: item.id,
+            provider: item.provider,
+            email: item.email,
+            label: item.label?.trim(),
+            color: item.color,
+          })),
+        }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Save failed (${res.status})`);
+      }
+
       toast.success("Labels saved");
       setShowAuthModal(null);
       await refetch();
-    } catch (error) {
-      toast.error("Could not save labels");
+    } catch (error: any) {
+      toast.error(error?.message || "Could not save labels");
     } finally {
       setLabelsLoading(false);
     }

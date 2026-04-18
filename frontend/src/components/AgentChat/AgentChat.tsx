@@ -1,4 +1,6 @@
 import React, { useRef, useEffect, useState } from "react";
+import { Check, Copy } from "lucide-react";
+import toast from "react-hot-toast";
 import { Message } from "../../hooks/useAgent";
 import ReactMarkdown from "react-markdown";
 import "./AgentChat.css";
@@ -33,11 +35,36 @@ const CHIPS = ["Today's schedule", "Check conflicts", "Teli bookings"];
 
 export default function AgentChat({ messages, loading, error, onSend }: AgentChatProps) {
     const [input, setInput] = useState("");
+    const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages, loading]);
+
+    const handleCopy = async (content: string, index: number) => {
+        try {
+            if (navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(content);
+            } else {
+                const ta = document.createElement("textarea");
+                ta.value = content;
+                ta.setAttribute("readonly", "");
+                ta.style.position = "absolute";
+                ta.style.left = "-9999px";
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand("copy");
+                document.body.removeChild(ta);
+            }
+            setCopiedIndex(index);
+            setTimeout(() => {
+                setCopiedIndex((curr) => (curr === index ? null : curr));
+            }, 1500);
+        } catch {
+            toast.error("Could not copy message");
+        }
+    };
 
     const handleSend = () => {
         const text = input.trim();
@@ -101,6 +128,15 @@ export default function AgentChat({ messages, loading, error, onSend }: AgentCha
                         <div className="message-bubble">
                             <ReactMarkdown>{msg.content}</ReactMarkdown>
                         </div>
+                        <button
+                            type="button"
+                            className="message-copy-btn"
+                            onClick={() => handleCopy(msg.content, i)}
+                            aria-label={copiedIndex === i ? "Copied" : "Copy message"}
+                            title={copiedIndex === i ? "Copied" : "Copy message"}
+                        >
+                            {copiedIndex === i ? <Check size={12} /> : <Copy size={12} />}
+                        </button>
                     </div>
                 ))}
 
