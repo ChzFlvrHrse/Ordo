@@ -58,7 +58,9 @@ export default function Layout() {
         }
       );
 
-      if (!result.ok) return;
+      if (!result.ok) {
+        return;
+      }
 
       const data = await result.json();
       setActiveCalendars(data.calendars ?? []);
@@ -78,6 +80,10 @@ export default function Layout() {
     }
   }, [integrations]);
 
+  const handleCalendarRefetch = useCallback(async () => {
+    await Promise.all([fetchActiveCalendars(), refetch()]);
+  }, [fetchActiveCalendars, refetch]);
+
   return (
     <div
       className={`layout${dragging ? " layout--dragging" : ""}`}
@@ -94,9 +100,7 @@ export default function Layout() {
             setDate={setDate}
             setVisibleRange={updateVisibleRange}
             ensureMonthsLoaded={ensureMonthsLoaded}
-            refetch={async () => {
-              await Promise.all([fetchActiveCalendars(), refetch()]);
-            }}
+            refetch={handleCalendarRefetch}
           />
         </div>
 

@@ -197,8 +197,6 @@ export default function Calendar({
     [filteredEvents]
   );
 
-  console.log(filteredEvents);
-
   const handleViewChange = (view: string) => {
     const api = calendarRef.current?.getApi();
     if (!api) return;
