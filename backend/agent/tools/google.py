@@ -24,6 +24,14 @@ TOOL_DEFINITIONS = [
                     "type": "integer",
                     "description": "Number of weeks to look ahead. Defaults to integration setting.",
                 },
+                "start": {
+                    "type": "string",
+                    "description": "Optional. Start of the time window. Accepts ISO 8601 datetime (e.g. '2026-04-18T00:00:00Z') or 'YYYY-MM-DD'. Must be passed together with `end`.",
+                },
+                "end": {
+                    "type": "string",
+                    "description": "Optional. End of the time window (exclusive). Accepts ISO 8601 datetime or 'YYYY-MM-DD'. Must be passed together with `start`.",
+                },
             },
             "required": [],
         },
@@ -93,9 +101,22 @@ async def _get_service(app_id: str, user_id: str, email: str = None):
     return service, integration
 
 
-async def get_events(app_id: str, user_id: str, email: str = None,
-                     lookahead_weeks: int = None) -> dict:
+def _parse_bound(value: str, tz) -> datetime:
+    """Accept ISO 8601 datetime or YYYY-MM-DD; return tz-aware datetime in `tz`."""
     try:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        dt = datetime.strptime(value, "%Y-%m-%d")
+    return tz.localize(dt) if dt.tzinfo is None else dt.astimezone(tz)
+
+
+async def get_events(app_id: str, user_id: str, email: str = None,
+                     lookahead_weeks: int = None,
+                     start: str = None, end: str = None) -> dict:
+    try:
+        if bool(start) ^ bool(end):
+            return {"success": False, "error": "Pass both start and end together"}
+
         integrations = (
             [db.get_integration(app_id, user_id, "google", email=email)]
             if email
@@ -117,14 +138,27 @@ async def get_events(app_id: str, user_id: str, email: str = None,
 
                 tz_name = integration.get("timezone") or "America/New_York"
                 tz = pytz.timezone(tz_name)
-                now = datetime.now(tz)
-                weeks = lookahead_weeks or integration.get("lookahead_weeks") or 2
-                end = now + timedelta(weeks=weeks)
+
+                if start and end:
+                    try:
+                        window_start = _parse_bound(start, tz)
+                        window_end = _parse_bound(end, tz)
+                    except ValueError:
+                        return {
+                            "success": False,
+                            "error": "start and end must be ISO 8601 datetimes or YYYY-MM-DD",
+                        }
+                    if window_end <= window_start:
+                        return {"success": False, "error": "end must be after start"}
+                else:
+                    window_start = datetime.now(tz)
+                    weeks = lookahead_weeks or integration.get("lookahead_weeks") or 2
+                    window_end = window_start + timedelta(weeks=weeks)
 
                 items = service.events().list(
                     calendarId=integration.get("calendar_id"),
-                    timeMin=now.isoformat(),
-                    timeMax=end.isoformat(),
+                    timeMin=window_start.isoformat(),
+                    timeMax=window_end.isoformat(),
                     singleEvents=True,
                     orderBy="startTime",
                 ).execute().get("items", [])
