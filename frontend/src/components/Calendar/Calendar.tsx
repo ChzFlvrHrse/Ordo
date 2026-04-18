@@ -206,14 +206,14 @@ export default function Calendar({
   const todaysDate = new Date().toLocaleDateString("en-US", {
     month: "long",
     day: "numeric",
-    year: "numeric",
+    // year: "numeric",
   });
   const displayedMonth = () => {
     const api = calendarRef.current?.getApi();
     if (!api) return null;
     return new Date(api.view.currentStart).toLocaleDateString("en-US", {
       month: "long",
-      // year: "numeric",
+      year: "numeric",
     });
   }
 
