@@ -1,6 +1,8 @@
 import React, { useRef, useEffect, useState } from "react";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, Mic, Square, Volume2 } from "lucide-react";
 import toast from "react-hot-toast";
+import { useTTS } from "../../hooks/useTTS";
+import { useSTT } from "../../hooks/useSTT";
 import { Message } from "../../hooks/useAgent";
 import ReactMarkdown from "react-markdown";
 import "./AgentChat.css";
@@ -22,7 +24,7 @@ function ordoAgent() {
             <circle cx="14" cy="5" r="1.5" />
             <path d="M1 15h3M24 15h3" />
         </svg>
-    )
+    );
 }
 
 const QUICK_PROMPTS = [
@@ -38,9 +40,38 @@ export default function AgentChat({ messages, loading, error, onSend }: AgentCha
     const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
 
+    const { speak, stop: stopSpeaking, speakingId } = useTTS();
+    const {
+        listening,
+        transcript,
+        wakeActive,
+        start,
+        stop: stopListening,
+        enableWakeWord,
+        disableWakeWord,
+    } = useSTT();
+    const wasListening = useRef(false);
+
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages, loading]);
+
+    useEffect(() => {
+        if (transcript) {
+            setInput(transcript);
+        }
+    }, [transcript]);
+
+    useEffect(() => {
+        if (wasListening.current && !listening) {
+            const text = transcript.trim();
+            if (text && !loading) {
+                setInput("");
+                onSend(text);
+            }
+        }
+        wasListening.current = listening;
+    }, [listening, transcript, loading, onSend]);
 
     const handleCopy = async (content: string, index: number) => {
         try {
@@ -57,6 +88,7 @@ export default function AgentChat({ messages, loading, error, onSend }: AgentCha
                 document.execCommand("copy");
                 document.body.removeChild(ta);
             }
+
             setCopiedIndex(index);
             setTimeout(() => {
                 setCopiedIndex((curr) => (curr === index ? null : curr));
@@ -80,13 +112,20 @@ export default function AgentChat({ messages, loading, error, onSend }: AgentCha
         }
     };
 
+    const handleMicClick = () => {
+        if (listening) {
+            stopListening();
+            return;
+        }
+        enableWakeWord();
+        start();
+    };
+
     return (
         <div className="agent-chat">
             <div className="agent-header">
                 <div className="agent-header-left">
-                    <div className="agent-icon">
-                        {ordoAgent()}
-                    </div>
+                    <div className="agent-icon">{ordoAgent()}</div>
                     <div>
                         <div className="agent-name">Say Hello to Ordo!</div>
                         <div className="agent-sub">I'm here to help you manage your schedule proactively</div>
@@ -123,22 +162,47 @@ export default function AgentChat({ messages, loading, error, onSend }: AgentCha
                     </div>
                 )}
 
-                {messages.map((msg, i) => (
-                    <div key={i} className={`message message--${msg.role}`}>
-                        <div className="message-bubble">
-                            <ReactMarkdown>{msg.content}</ReactMarkdown>
+                {messages.map((msg, i) => {
+                    const isAssistant = msg.role === "assistant";
+                    const messageTtsId = `${i}-${msg.role}-${msg.content.slice(0, 40)}`;
+                    const isSpeaking = speakingId === messageTtsId;
+
+                    return (
+                        <div key={i} className={`message message--${msg.role}`}>
+                            <div className="message-bubble">
+                                <ReactMarkdown>{msg.content}</ReactMarkdown>
+                            </div>
+
+                            <div className="message-actions">
+                                <button
+                                    type="button"
+                                    className="message-copy-btn"
+                                    onClick={() => handleCopy(msg.content, i)}
+                                    aria-label={copiedIndex === i ? "Copied" : "Copy message"}
+                                    title={copiedIndex === i ? "Copied" : "Copy message"}
+                                >
+                                    {copiedIndex === i ? <Check size={12} /> : <Copy size={12} />}
+                                </button>
+
+                                {isAssistant && (
+                                    <button
+                                        type="button"
+                                        className="message-tts-btn"
+                                        onClick={() =>
+                                            isSpeaking
+                                                ? stopSpeaking()
+                                                : speak(messageTtsId, msg.content)
+                                        }
+                                        aria-label={isSpeaking ? "Stop speaking" : "Read message aloud"}
+                                        title={isSpeaking ? "Stop speaking" : "Read message aloud"}
+                                    >
+                                        {isSpeaking ? <Square size={12} /> : <Volume2 size={12} />}
+                                    </button>
+                                )}
+                            </div>
                         </div>
-                        <button
-                            type="button"
-                            className="message-copy-btn"
-                            onClick={() => handleCopy(msg.content, i)}
-                            aria-label={copiedIndex === i ? "Copied" : "Copy message"}
-                            title={copiedIndex === i ? "Copied" : "Copy message"}
-                        >
-                            {copiedIndex === i ? <Check size={12} /> : <Copy size={12} />}
-                        </button>
-                    </div>
-                ))}
+                    );
+                })}
 
                 {loading && (
                     <div className="message message--assistant">
@@ -164,10 +228,12 @@ export default function AgentChat({ messages, loading, error, onSend }: AgentCha
                 <div className="agent-input-inner">
                     <div className="agent-input-label">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
+                            <rect x="3" y="4" width="18" height="18" rx="2" />
+                            <path d="M16 2v4M8 2v4M3 10h18" />
                         </svg>
                         Ask Ordo anything
                     </div>
+
                     <div className="agent-input-row">
                         <textarea
                             className="agent-input"
@@ -177,6 +243,33 @@ export default function AgentChat({ messages, loading, error, onSend }: AgentCha
                             placeholder="Move Friday's calls to the afternoon…"
                             rows={1}
                         />
+
+                        <button
+                            type="button"
+                            className={`agent-mic ${listening ? "active" : ""} ${wakeActive ? "wake" : ""}`}
+                            onClick={handleMicClick}
+                            onContextMenu={(e) => {
+                                e.preventDefault();
+                                wakeActive ? disableWakeWord() : enableWakeWord();
+                            }}
+                            aria-label={
+                                listening
+                                    ? "Stop listening"
+                                    : wakeActive
+                                        ? "Listening for \"Hey Ordo\" (right-click to disable)"
+                                        : "Speak into microphone"
+                            }
+                            title={
+                                listening
+                                    ? "Stop listening"
+                                    : wakeActive
+                                        ? "Listening for \"Hey Ordo\" (right-click to disable)"
+                                        : "Speak into microphone (right-click to enable wake word)"
+                            }
+                        >
+                            {listening ? <Square size={16} /> : <Mic size={16} />}
+                        </button>
+
                         <button
                             className="agent-send"
                             onClick={handleSend}
