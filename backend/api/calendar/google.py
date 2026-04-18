@@ -1,4 +1,4 @@
-import os, pytz, logging, google.oauth2.credentials, google.auth.transport.requests
+import os, pytz, logging, google.oauth2.credentials, google.auth.transport.requests, uuid
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from datetime import datetime, timedelta
@@ -69,7 +69,6 @@ async def get_refreshed_credentials(app_id: str, user_id: str,
 
     credentials = _credentials(integration)
 
-    # Refresh a bit before actual expiry so Google never returns 401 mid-request.
     skew = timedelta(minutes=5)
     expiry = credentials.expiry  # naive UTC
     needs_refresh = (
@@ -92,6 +91,7 @@ async def get_refreshed_credentials(app_id: str, user_id: str,
 
     return credentials, integration
 
+
 def require_api_key(f):
     @wraps(f)
     async def decorated(*args, **kwargs):
@@ -105,6 +105,10 @@ def require_api_key(f):
         return await f(*args, **kwargs)
     return decorated
 
+
+# -------------------------
+# OAuth
+# -------------------------
 
 @google_calendar_bp.route('/connect', methods=['POST'])
 @require_api_key
@@ -179,12 +183,24 @@ async def google_calendar_exchange():
             redirect_uri=post_exchange_uri,
         )
 
+        # Register webhook watch
+        try:
+            register_google_watch(app_id, user_id, email=email)
+            logger.info(f"=== ORDO: Registered Google watch app={app_id} user={user_id} ===")
+        except Exception as e:
+            logger.warning(f"=== ORDO: Failed to register Google watch: {e} ===")
+            # Non-fatal — don't block the OAuth flow
+
         logger.info(f"=== ORDO: Connected google calendar app={app_id} user={user_id} email={email} ===")
         return redirect(post_exchange_uri)
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
+# -------------------------
+# Status / Disconnect
+# -------------------------
 
 @google_calendar_bp.route('/status', methods=['GET'])
 @require_api_key
@@ -235,15 +251,19 @@ async def google_calendar_disconnect():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
+# -------------------------
+# Events
+# -------------------------
+
 @google_calendar_bp.route('/events', methods=['GET'])
 @require_api_key
 async def google_calendar_events():
     try:
         user_id = request.args.get("user_id")
         email = request.args.get("email")
-
-        start_param = request.args.get("start")  # YYYY-MM-DD or ISO datetime
-        end_param = request.args.get("end")      # YYYY-MM-DD or ISO datetime
+        start_param = request.args.get("start")
+        end_param = request.args.get("end")
 
         if not user_id:
             return jsonify({"error": "user_id is required"}), 400
@@ -277,7 +297,6 @@ async def google_calendar_events():
                 tz_name = integration.get("timezone") or "America/New_York"
                 tz = pytz.timezone(tz_name)
 
-                # Build requested time window
                 if start_param and end_param:
                     try:
                         parsed_start = datetime.fromisoformat(start_param.replace("Z", "+00:00"))
@@ -397,6 +416,10 @@ async def google_calendar_events():
         return jsonify({"error": str(e)}), 500
 
 
+# -------------------------
+# Book / Cancel / Reschedule
+# -------------------------
+
 @google_calendar_bp.route('/book', methods=['POST'])
 @require_api_key
 async def google_calendar_book():
@@ -405,7 +428,7 @@ async def google_calendar_book():
         args = data.get("args") or data
 
         user_id = args.get("user_id")
-        email = args.get("email")  # which Google account to book on
+        email = args.get("email")
         title = args.get("title")
         start_time = args.get("start_time")
         end_time = args.get("end_time")
@@ -527,3 +550,222 @@ async def google_calendar_reschedule():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# -------------------------
+# Collisions
+# -------------------------
+
+@google_calendar_bp.route('/collisions', methods=['GET'])
+@require_api_key
+async def get_collisions():
+    try:
+        user_id = request.args.get("user_id")
+        if not user_id:
+            return jsonify({"error": "user_id is required"}), 400
+
+        collisions = db.get_pending_collisions(request.ordo_app["id"], user_id)
+        return jsonify({"collisions": collisions, "count": len(collisions), "success": True})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@google_calendar_bp.route('/collisions/resolve', methods=['POST'])
+@require_api_key
+async def resolve_collision():
+    try:
+        data = await request.get_json()
+        notification_id = data.get("notification_id")
+        resolution = data.get("resolution")  # keep_new | keep_old | manual
+
+        if not notification_id or not resolution:
+            return jsonify({"error": "notification_id and resolution are required"}), 400
+
+        if resolution not in ("keep_new", "keep_old", "manual"):
+            return jsonify({"error": "resolution must be keep_new, keep_old, or manual"}), 400
+
+        updated = db.resolve_collision(notification_id, resolution)
+        if not updated:
+            return jsonify({"error": "Notification not found"}), 404
+
+        return jsonify({"collision": updated, "success": True})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# -------------------------
+# Webhook
+# -------------------------
+
+@google_calendar_bp.route('/webhook', methods=['POST'])
+async def google_calendar_webhook():
+    channel_id = request.headers.get("X-Goog-Channel-ID")
+    resource_state = request.headers.get("X-Goog-Resource-State")
+
+    logger.info(f"=== ORDO WEBHOOK: channel_id={channel_id} state={resource_state} ===")  # add this
+
+    if resource_state == "sync":
+        return "", 200
+
+    if not channel_id:
+        return "", 400
+
+    row = db.get_watch_channel_by_channel_id(channel_id)
+    if not row:
+        return "", 404
+
+    await process_calendar_changes(row["app_id"], row["user_id"], email=row["email"])
+    return "", 200
+
+
+async def process_calendar_changes(app_id: str, user_id: str, email: str):
+    try:
+        credentials, integration = await get_refreshed_credentials(app_id, user_id, "google", email=email)
+    except ValueError:
+        logger.warning(f"=== ORDO: No integration found for app={app_id} user={user_id} email={email} ===")
+        return
+
+    service = build("calendar", "v3", credentials=credentials, cache_discovery=False)
+    channel_row = db.get_watch_channel(app_id, user_id, "google", email=email)
+    sync_token = channel_row.get("sync_token") if channel_row else None
+
+    try:
+        if sync_token:
+            events_result = service.events().list(
+                calendarId="primary",
+                syncToken=sync_token,
+            ).execute()
+        else:
+            events_result = service.events().list(
+                calendarId="primary",
+                timeMin=datetime.utcnow().isoformat() + "Z",
+                maxResults=250,
+                singleEvents=True,
+            ).execute()
+
+        new_sync_token = events_result.get("nextSyncToken")
+        if new_sync_token:
+            db.update_watch_channel_sync_token(app_id, user_id, "google", email, new_sync_token)
+
+        for event in events_result.get("items", []):
+            if event.get("status") == "cancelled":
+                continue
+            await check_collision(app_id, user_id, event, service)
+
+    except Exception as e:
+        if "410" in str(e):
+            logger.warning(f"=== ORDO: Sync token expired for app={app_id} user={user_id} email={email}, resetting ===")
+            db.update_watch_channel_sync_token(app_id, user_id, "google", email, None)
+        else:
+            logger.error(f"=== ORDO: process_calendar_changes error: {e} ===")
+
+
+async def check_collision(app_id: str, user_id: str, new_event: dict, service):
+    start = new_event.get("start", {}).get("dateTime")
+    end = new_event.get("end", {}).get("dateTime")
+    event_id = new_event.get("id")
+
+    if not start or not end:
+        return  # all-day event, skip
+
+    existing = service.events().list(
+        calendarId="primary",
+        timeMin=start,
+        timeMax=end,
+        singleEvents=True,
+    ).execute().get("items", [])
+
+    collisions = [
+        e for e in existing
+        if e["id"] != event_id and e.get("status") != "cancelled"
+    ]
+
+    if not collisions:
+        return
+
+    logger.info(f"=== ORDO: Collision detected for user={user_id} event={new_event.get('summary')} ===")
+
+    db.create_collision_notification(
+        app_id=app_id,
+        user_id=user_id,
+        new_event_id=event_id,
+        new_event_summary=new_event.get("summary", "Untitled"),
+        new_event_start=start,
+        new_event_end=end,
+        colliding_events=[
+            {
+                "id": e["id"],
+                "summary": e.get("summary", "Untitled"),
+                # handle all-day events that only have 'date', not 'dateTime'
+                "start": e.get("start", {}).get("dateTime") or e.get("start", {}).get("date"),
+                "end": e.get("end", {}).get("dateTime") or e.get("end", {}).get("date"),
+            }
+            for e in collisions
+            # skip colliding events that have no time at all
+            if e.get("start", {}).get("dateTime") or e.get("start", {}).get("date")
+        ],
+    )
+
+# -------------------------
+# Watch registration helpers
+# -------------------------
+
+def get_google_credentials(app_id: str, user_id: str, email: str = None) -> google.oauth2.credentials.Credentials:
+    row = db.get_integration(app_id, user_id, provider="google", email=email)
+    if not row:
+        raise Exception(f"No Google integration for user {user_id} email={email}")
+
+    creds = google.oauth2.credentials.Credentials(
+        token=row["access_token"],
+        refresh_token=row["refresh_token"],
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=os.environ["GOOGLE_CLIENT_ID"],
+        client_secret=os.environ["GOOGLE_CLIENT_SECRET"],
+    )
+
+    if creds.expired:
+        creds.refresh(google.auth.transport.requests.Request())
+        db.upsert_integration(
+            app_id, user_id, "google", row["email"],
+            access_token=creds.token,
+            token_expiry=creds.expiry.isoformat(),
+        )
+
+    return creds
+
+
+def register_google_watch(app_id: str, user_id: str, email: str = None):
+    integration = db.get_integration(app_id, user_id, "google", email=email)
+    if not integration:
+        raise Exception(f"No Google integration for user {user_id} email={email}")
+
+    actual_email = integration["email"]  # use this everywhere below
+    creds = get_google_credentials(app_id, user_id, email=actual_email)
+    service = build("calendar", "v3", credentials=creds, cache_discovery=False)
+
+    channel_id = str(uuid.uuid4())
+    expiration = datetime.utcnow() + timedelta(days=6)
+    expiration_ms = int(expiration.timestamp() * 1000)
+
+    result = service.events().watch(
+        calendarId="primary",
+        body={
+            "id": channel_id,
+            "type": "web_hook",
+            "address": f"{os.environ['ORDO_BASE_URL']}/google_calendar/webhook",
+            "expiration": expiration_ms,
+        }
+    ).execute()
+
+    db.upsert_watch_channel(
+        app_id=app_id,
+        user_id=user_id,
+        provider="google",
+        email=actual_email,
+        channel_id=channel_id,
+        resource_id=result["resourceId"],
+        expiration=expiration.isoformat(),
+        sync_token=None,
+    )

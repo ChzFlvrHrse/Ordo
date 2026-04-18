@@ -1,7 +1,8 @@
 import os, logging
-from dotenv import load_dotenv
 from quart import Quart
 from quart_cors import cors
+from dotenv import load_dotenv
+from api.scheduler import scheduler
 # from modal import App, Image, Secret, asgi_app, fastapi_endpoint, Period
 
 # Blueprint imports
@@ -48,9 +49,13 @@ quart_app.register_blueprint(integrations_bp)
 # def serve():
 #     return quart_app.run()
 
-@quart_app.route('/callback')
-async def callback():
-    return "connected", 200
+@quart_app.before_serving
+async def startup():
+    scheduler.start()
+
+@quart_app.after_serving
+async def shutdown():
+    scheduler.shutdown()
 
 if __name__ == "__main__":
     from classes import OrdoDB

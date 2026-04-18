@@ -1,4 +1,6 @@
-import json, logging, pytz
+import json
+import logging
+import pytz
 from datetime import datetime, timedelta
 from googleapiclient.discovery import build
 from api.calendar import get_refreshed_credentials
@@ -92,12 +94,41 @@ TOOL_DEFINITIONS = [
             "required": ["event_id", "start_time", "end_time"],
         },
     },
+    {
+        "name": "google_get_collisions",
+        "description": "Check for any pending calendar collision notifications for the user. Call this after booking an event to see if any conflicts were detected.",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
+        "name": "google_resolve_collision",
+        "description": "Resolve a calendar collision. Present the user with all three options before calling this.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "notification_id": {
+                    "type": "string",
+                    "description": "The collision notification ID to resolve.",
+                },
+                "resolution": {
+                    "type": "string",
+                    "enum": ["keep_new", "keep_old", "manual"],
+                    "description": "keep_new: delete the conflicting old event. keep_old: delete the newly created event. manual: acknowledge and handle manually.",
+                },
+            },
+            "required": ["notification_id", "resolution"],
+        },
+    },
 ]
 
 
 async def _get_service(app_id: str, user_id: str, email: str = None):
     credentials, integration = await get_refreshed_credentials(app_id, user_id, "google", email=email)
-    service = build("calendar", "v3", credentials=credentials, cache_discovery=False)
+    service = build("calendar", "v3", credentials=credentials,
+                    cache_discovery=False)
     return service, integration
 
 
@@ -134,7 +165,8 @@ async def get_events(app_id: str, user_id: str, email: str = None,
                 credentials, integration = await get_refreshed_credentials(
                     app_id, user_id, "google", email=integration["email"]
                 )
-                service = build("calendar", "v3", credentials=credentials, cache_discovery=False)
+                service = build("calendar", "v3",
+                                credentials=credentials, cache_discovery=False)
 
                 tz_name = integration.get("timezone") or "America/New_York"
                 tz = pytz.timezone(tz_name)
@@ -152,7 +184,8 @@ async def get_events(app_id: str, user_id: str, email: str = None,
                         return {"success": False, "error": "end must be after start"}
                 else:
                     window_start = datetime.now(tz)
-                    weeks = lookahead_weeks or integration.get("lookahead_weeks") or 2
+                    weeks = lookahead_weeks or integration.get(
+                        "lookahead_weeks") or 2
                     window_end = window_start + timedelta(weeks=weeks)
 
                 items = service.events().list(
@@ -169,11 +202,13 @@ async def get_events(app_id: str, user_id: str, email: str = None,
                 all_events.extend(items)
 
             except Exception as e:
-                logger.error(f"google.get_events error for {integration.get('email')}: {e}")
+                logger.error(
+                    f"google.get_events error for {integration.get('email')}: {e}")
                 continue
 
         all_events.sort(key=lambda e: (
-            (e.get("start") or {}).get("dateTime") or (e.get("start") or {}).get("date") or ""
+            (e.get("start") or {}).get("dateTime") or (
+                e.get("start") or {}).get("date") or ""
         ))
 
         return {"success": True, "events": all_events, "count": len(all_events)}
@@ -265,4 +300,35 @@ async def reschedule_event(app_id: str, user_id: str, event_id: str,
 
     except Exception as e:
         logger.error(f"google.reschedule_event error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+async def get_collisions(app_id: str, user_id: str) -> dict:
+    try:
+        collisions = db.get_pending_collisions(app_id, user_id)
+        return {"success": True, "collisions": collisions, "count": len(collisions)}
+    except Exception as e:
+        logger.error(f"google.get_collisions error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+async def resolve_collision(app_id: str, user_id: str,
+                            notification_id: str, resolution: str) -> dict:
+    try:
+        updated = db.resolve_collision(notification_id, resolution)
+        if not updated:
+            return {"success": False, "error": "Notification not found"}
+
+        # If keep_new, cancel the old conflicting events
+        if resolution == "keep_new":
+            for colliding in updated.get("colliding_events", []):
+                await cancel_event(app_id, user_id, colliding["id"])
+
+        # If keep_old, cancel the new event
+        elif resolution == "keep_old":
+            await cancel_event(app_id, user_id, updated["new_event_id"])
+
+        return {"success": True, "collision": updated}
+    except Exception as e:
+        logger.error(f"google.resolve_collision error: {e}")
         return {"success": False, "error": str(e)}

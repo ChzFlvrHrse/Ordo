@@ -1,4 +1,7 @@
-import sqlite3, json, logging, hashlib
+import sqlite3
+import json
+import logging
+import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 from contextlib import contextmanager
@@ -92,6 +95,39 @@ class OrdoDB:
                     sync_status TEXT DEFAULT 'pending',
                     UNIQUE(event_id, provider)
                 );
+
+                CREATE TABLE IF NOT EXISTS calendar_watch_channels (
+                    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+                    app_id TEXT NOT NULL REFERENCES ordo_apps(id),
+                    user_id TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    email TEXT NOT NULL,
+                    channel_id TEXT,
+                    resource_id TEXT,
+                    expiration TEXT,
+                    sync_token TEXT,
+                    UNIQUE(app_id, user_id, provider, email)
+                );
+
+                CREATE TABLE IF NOT EXISTS collision_notifications (
+                    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+                    app_id TEXT NOT NULL REFERENCES ordo_apps(id),
+                    user_id TEXT NOT NULL,
+                    new_event_id TEXT,
+                    new_event_summary TEXT,
+                    new_event_start TEXT,
+                    new_event_end TEXT,
+                    colliding_events TEXT,
+                    status TEXT DEFAULT 'pending',
+                    resolution TEXT,
+                    created_at TEXT DEFAULT (datetime('now'))
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_watch_channels_app_user
+                    ON calendar_watch_channels(app_id, user_id, provider);
+
+                CREATE INDEX IF NOT EXISTS idx_collision_notifications_user
+                    ON collision_notifications(app_id, user_id, status);
 
                 CREATE INDEX IF NOT EXISTS idx_integrations_app_user
                     ON calendar_integrations(app_id, user_id, provider);
@@ -239,7 +275,7 @@ class OrdoDB:
             return cur.rowcount > 0
 
     def update_integration_config(self, app_id: str, user_id: str,
-                                   provider: str, email: str, **kwargs) -> dict | None:
+                                  provider: str, email: str, **kwargs) -> dict | None:
         if "available_days" in kwargs and isinstance(kwargs["available_days"], list):
             kwargs["available_days"] = json.dumps(kwargs["available_days"])
         kwargs["updated_at"] = datetime.now(timezone.utc).isoformat()
@@ -321,7 +357,8 @@ class OrdoDB:
                 f"UPDATE events SET {sets} WHERE id = ?",
                 (*kwargs.values(), event_id)
             )
-            row = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+            row = conn.execute(
+                "SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
             return self._deserialize_event(dict(row)) if row else None
 
     def delete_event(self, event_id: str) -> bool:
@@ -363,7 +400,8 @@ class OrdoDB:
     def get_event_syncs(self, event_id: str) -> list[dict]:
         with self._conn() as conn:
             rows = conn.execute(
-                "SELECT * FROM event_provider_sync WHERE event_id = ?", (event_id,)
+                "SELECT * FROM event_provider_sync WHERE event_id = ?",
+                (event_id,),
             ).fetchall()
             return [dict(r) for r in rows]
 
@@ -386,6 +424,122 @@ class OrdoDB:
             return cur.rowcount > 0
 
     # -------------------------
+    # Watch Channels
+    # -------------------------
+
+    def upsert_watch_channel(self, app_id: str, user_id: str, provider: str, email: str, **kwargs) -> dict:
+        kwargs_copy = {**kwargs}
+        fields = ", ".join(kwargs_copy.keys())
+        placeholders = ", ".join("?" * len(kwargs_copy))
+        updates = ", ".join(f"{k} = excluded.{k}" for k in kwargs_copy)
+        with self._conn() as conn:
+            conn.execute(
+                f"""INSERT INTO calendar_watch_channels (app_id, user_id, provider, email, {fields})
+                    VALUES (?, ?, ?, ?, {placeholders})
+                    ON CONFLICT(app_id, user_id, provider, email) DO UPDATE SET {updates}""",
+                (app_id, user_id, provider, email, *kwargs_copy.values())
+            )
+            row = conn.execute(
+                """SELECT * FROM calendar_watch_channels
+                   WHERE app_id = ? AND user_id = ? AND provider = ? AND email = ?""",
+                (app_id, user_id, provider, email)
+            ).fetchone()
+            return dict(row)
+
+    def get_watch_channel(self, app_id: str, user_id: str, provider: str, email: str) -> dict | None:
+        with self._conn() as conn:
+            row = conn.execute(
+                """SELECT * FROM calendar_watch_channels
+                   WHERE app_id = ? AND user_id = ? AND provider = ? AND email = ?""",
+                (app_id, user_id, provider, email)
+            ).fetchone()
+            return dict(row) if row else None
+
+    def get_watch_channel_by_channel_id(self, channel_id: str) -> dict | None:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM calendar_watch_channels WHERE channel_id = ?",
+                (channel_id,)
+            ).fetchone()
+            return dict(row) if row else None
+
+    def get_expiring_watch_channels(self, before: str) -> list[dict]:
+        """Get all channels expiring before a given ISO timestamp."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM calendar_watch_channels WHERE expiration < ?",
+                (before,)
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def update_watch_channel_sync_token(self, app_id: str, user_id: str,
+                                        provider: str, email: str, sync_token: str):
+        with self._conn() as conn:
+            conn.execute(
+                """UPDATE calendar_watch_channels SET sync_token = ?
+                   WHERE app_id = ? AND user_id = ? AND provider = ? AND email = ?""",
+                (sync_token, app_id, user_id, provider, email)
+            )
+
+    # -------------------------
+    # Collision Notifications
+    # -------------------------
+
+    def create_collision_notification(self, app_id: str, user_id: str,
+                                      new_event_id: str, new_event_summary: str,
+                                      new_event_start: str, new_event_end: str,
+                                      colliding_events: list) -> dict:
+        with self._conn() as conn:
+            conn.execute(
+                """INSERT INTO collision_notifications
+                   (app_id, user_id, new_event_id, new_event_summary,
+                    new_event_start, new_event_end, colliding_events)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (app_id, user_id, new_event_id, new_event_summary,
+                 new_event_start, new_event_end, json.dumps(colliding_events))
+            )
+            row = conn.execute(
+                """SELECT * FROM collision_notifications
+                   WHERE app_id = ? AND user_id = ? AND new_event_id = ?
+                   ORDER BY created_at DESC LIMIT 1""",
+                (app_id, user_id, new_event_id)
+            ).fetchone()
+            return self._deserialize_collision(dict(row))
+
+    def get_pending_collisions(self, app_id: str, user_id: str) -> list[dict]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                """SELECT * FROM collision_notifications
+                   WHERE app_id = ? AND user_id = ? AND status = 'pending'
+                   ORDER BY created_at DESC""",
+                (app_id, user_id)
+            ).fetchall()
+            return [self._deserialize_collision(dict(r)) for r in rows]
+
+    def resolve_collision(self, notification_id: str, resolution: str) -> dict | None:
+        """resolution: 'keep_new' | 'keep_old' | 'manual'"""
+        with self._conn() as conn:
+            conn.execute(
+                """UPDATE collision_notifications
+                   SET status = 'resolved', resolution = ?
+                   WHERE id = ?""",
+                (resolution, notification_id)
+            )
+            row = conn.execute(
+                "SELECT * FROM collision_notifications WHERE id = ?",
+                (notification_id,)
+            ).fetchone()
+            return self._deserialize_collision(dict(row)) if row else None
+
+    def _deserialize_collision(self, row: dict) -> dict:
+        if row.get("colliding_events") and isinstance(row["colliding_events"], str):
+            try:
+                row["colliding_events"] = json.loads(row["colliding_events"])
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return row
+
+    # -------------------------
     # Dev helpers
     # -------------------------
 
@@ -396,6 +550,8 @@ class OrdoDB:
                 DROP TABLE IF EXISTS event_provider_sync;
                 DROP TABLE IF EXISTS events;
                 DROP TABLE IF EXISTS calendar_integrations;
+                DROP TABLE IF EXISTS calendar_watch_channels;
+                DROP TABLE IF EXISTS collision_notifications;
                 DROP TABLE IF EXISTS ordo_apps;
             """)
         self._init_db()

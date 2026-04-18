@@ -19,6 +19,8 @@ TOOL_MAP = {
     "google_book_event":       google.book_event,
     "google_cancel_event":     google.cancel_event,
     "google_reschedule_event": google.reschedule_event,
+    "google_get_collisions": google.get_collisions,
+    "google_resolve_collision": google.resolve_collision,
 }
 
 
