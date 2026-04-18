@@ -77,21 +77,24 @@ function LabelLegend({
   if (legend.length === 0) return null;
 
   return (
-    <div className="label-legend-wrap">
-      <div className="label-legend-header">Labels</div>
-      <div className="label-legend">
-        {legend.map((item) => (
-          <div
-            key={item.label}
-            onClick={() => toggleLabelFilter(item.label)}
-            className={`label-legend-item${activeLabelFilters.includes(item.label) ? " active" : ""}`}
-          >
-            <span className="label-legend-item-color" style={{ background: item.color }} />
-            <span className="label-legend-item-text">{item.label}</span>
-          </div>
-        ))}
+    <>
+      <div className="legend-divider"></div>
+      <div className="label-legend-wrap">
+        <div className="label-legend-header">Labels</div>
+        <div className="label-legend">
+          {legend.map((item) => (
+            <div
+              key={item.label}
+              onClick={() => toggleLabelFilter(item.label)}
+              className={`label-legend-item${activeLabelFilters.includes(item.label) ? " active" : ""}`}
+            >
+              <span className="label-legend-item-color" style={{ background: item.color }} />
+              <span className="label-legend-item-text">{item.label}</span>
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -414,7 +417,6 @@ export default function Calendar({ events, loading, activeCalendars, refetch }: 
                 })}
               </div>
             </div>
-            <div className="legend-divider"></div>
             <LabelLegend
               integrations={activeCalendars}
               activeLabelFilters={activeLabelFilters}
