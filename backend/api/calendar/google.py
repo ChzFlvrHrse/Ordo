@@ -652,7 +652,7 @@ async def process_calendar_changes(app_id: str, user_id: str, email: str):
         for event in events_result.get("items", []):
             if event.get("status") == "cancelled":
                 continue
-            await check_collision(app_id, user_id, event, service)
+            await check_collision(app_id, user_id, email, event, service)
 
     except Exception as e:
         if "410" in str(e):
@@ -662,7 +662,7 @@ async def process_calendar_changes(app_id: str, user_id: str, email: str):
             logger.error(f"=== ORDO: process_calendar_changes error: {e} ===")
 
 
-async def check_collision(app_id: str, user_id: str, new_event: dict, service):
+async def check_collision(app_id: str, user_id: str, email: str, new_event: dict, service):
     start = new_event.get("start", {}).get("dateTime")
     end = new_event.get("end", {}).get("dateTime")
     event_id = new_event.get("id")
@@ -690,6 +690,7 @@ async def check_collision(app_id: str, user_id: str, new_event: dict, service):
     db.create_collision_notification(
         app_id=app_id,
         user_id=user_id,
+        email=email,
         new_event_id=event_id,
         new_event_summary=new_event.get("summary", "Untitled"),
         new_event_start=start,
@@ -701,6 +702,7 @@ async def check_collision(app_id: str, user_id: str, new_event: dict, service):
                 # handle all-day events that only have 'date', not 'dateTime'
                 "start": e.get("start", {}).get("dateTime") or e.get("start", {}).get("date"),
                 "end": e.get("end", {}).get("dateTime") or e.get("end", {}).get("date"),
+                "email": email,
             }
             for e in collisions
             # skip colliding events that have no time at all

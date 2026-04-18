@@ -319,14 +319,14 @@ async def resolve_collision(app_id: str, user_id: str,
         if not updated:
             return {"success": False, "error": "Notification not found"}
 
-        # If keep_new, cancel the old conflicting events
         if resolution == "keep_new":
             for colliding in updated.get("colliding_events", []):
-                await cancel_event(app_id, user_id, colliding["id"])
+                await cancel_event(app_id, user_id, colliding["id"], email=colliding["email"])
 
-        # If keep_old, cancel the new event
         elif resolution == "keep_old":
-            await cancel_event(app_id, user_id, updated["new_event_id"])
+            # need to know which account the new event is on
+            # store email on the notification itself too
+            await cancel_event(app_id, user_id, updated["new_event_id"], email=updated["email"])
 
         return {"success": True, "collision": updated}
     except Exception as e:

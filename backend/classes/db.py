@@ -113,6 +113,7 @@ class OrdoDB:
                     id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
                     app_id TEXT NOT NULL REFERENCES ordo_apps(id),
                     user_id TEXT NOT NULL,
+                    email TEXT,
                     new_event_id TEXT,
                     new_event_summary TEXT,
                     new_event_start TEXT,
@@ -486,16 +487,17 @@ class OrdoDB:
     # -------------------------
 
     def create_collision_notification(self, app_id: str, user_id: str,
+                                      email: str,
                                       new_event_id: str, new_event_summary: str,
                                       new_event_start: str, new_event_end: str,
                                       colliding_events: list) -> dict:
         with self._conn() as conn:
             conn.execute(
                 """INSERT INTO collision_notifications
-                   (app_id, user_id, new_event_id, new_event_summary,
+                   (app_id, user_id, email, new_event_id, new_event_summary,
                     new_event_start, new_event_end, colliding_events)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (app_id, user_id, new_event_id, new_event_summary,
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (app_id, user_id, email, new_event_id, new_event_summary,
                  new_event_start, new_event_end, json.dumps(colliding_events))
             )
             row = conn.execute(
