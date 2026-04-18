@@ -14,11 +14,17 @@ export interface OrdoEvent {
   location?: string;
   description?: string;
   attendees?: string[];
+  meetLink?: string;
+  htmlLink?: string;
 }
 
 function normalizeGoogleEvent(event: any, integrations: any[]): OrdoEvent {
   const account = event._ordo_account;
   const integration = integrations.find((i) => i.email === account);
+
+  const meetLink =
+    event.conferenceData?.entryPoints?.find((e: any) => e.entryPointType === "video")?.uri ||
+    null;
 
   return {
     id: event.id,
@@ -32,6 +38,8 @@ function normalizeGoogleEvent(event: any, integrations: any[]): OrdoEvent {
     location: event.location,
     description: event.description,
     attendees: event.attendees?.map((a: any) => a.email),
+    meetLink,
+    htmlLink: event.htmlLink,
   };
 }
 

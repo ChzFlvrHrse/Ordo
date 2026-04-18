@@ -8,9 +8,12 @@ import { ChevronDown, Link2, Tag } from "lucide-react";
 import toast from "react-hot-toast";
 import { OrdoEvent } from "../../hooks/useEvents";
 import config from "../../config";
+import "./Calendar.css";
+
+// Modals
 import GoogleCalendarModal from "../../modal/GoogleCalendarModal/GoogleCalendarModal";
 import CalendarLabelsModal from "../../modal/CalendarLabelsModal/CalendarLabelsModal";
-import "./Calendar.css";
+import EventDetailsModal from "../../modal/EventDetailsModal/EventDetailsModal";
 
 interface CalendarProps {
   events: OrdoEvent[];
@@ -132,6 +135,7 @@ export default function Calendar({
   const [activeProvider, setActiveProvider] = useState<string | null>(null);
   const [labelsLoading, setLabelsLoading] = useState(false);
   const [activeLabelFilters, setActiveLabelFilters] = useState<string[]>([]);
+  const [selectedEvent, setSelectedEvent] = useState<any | null>(null);
 
   useEffect(() => {
     const connections = activeCalendars.reduce((acc, calendar) => {
@@ -180,15 +184,20 @@ export default function Calendar({
         end: e.end,
         extendedProps: {
           provider: e.provider,
+          email: e.email,
           color: e.color,
           label: e.label,
           location: e.location,
           description: e.description,
           attendees: e.attendees,
+          meetLink: e.meetLink,
+          htmlLink: e.htmlLink,
         },
       })),
     [filteredEvents]
   );
+
+  console.log(filteredEvents);
 
   const handleViewChange = (view: string) => {
     const api = calendarRef.current?.getApi();
@@ -219,6 +228,14 @@ export default function Calendar({
 
   const handleEventClick = (arg: EventClickArg) => {
     console.log("Event clicked:", arg.event.title);
+    setSelectedEvent({
+      id: arg.event.id,
+      title: arg.event.title,
+      start: arg.event.start,
+      end: arg.event.end,
+      allDay: arg.event.allDay,
+      extendedProps: arg.event.extendedProps,
+    });
   };
 
   const connectGoogleCalendar = async () => {
@@ -334,6 +351,13 @@ export default function Calendar({
           onSave={async (items: any[]) => {
             await saveLabels(items);
           }}
+        />
+      )}
+
+      {selectedEvent && (
+        <EventDetailsModal
+          event={selectedEvent}
+          onClose={() => setSelectedEvent(null)}
         />
       )}
 
