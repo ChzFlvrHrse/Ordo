@@ -661,9 +661,46 @@
   margin: 0 0 14px;
   padding: 12px 14px;
   border-radius: 16px;
+}
+
+.calendar-legend-wrap {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 20px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: 16px;
 
   background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.connections-legend-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.connections-legend-pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.source-pill-wrapper {
+  position: relative;
+}
+
+.calendar-legend-wrap .label-legend-wrap {
+  margin: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  padding-left: 20px;
+  margin-left: 0;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .label-legend-header {
@@ -678,6 +715,14 @@
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.legend-divider {
+  flex: 0 0 auto;
+  align-self: stretch;
+  width: 1.5px;
+  margin: 0;
+  background: rgba(255, 255, 255, 0.5);
 }
 
 /* existing pills */

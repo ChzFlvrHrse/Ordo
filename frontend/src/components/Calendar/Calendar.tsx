@@ -78,7 +78,7 @@ function LabelLegend({
 
   return (
     <div className="label-legend-wrap">
-      <div className="label-legend-header">Filter by Label</div>
+      <div className="label-legend-header">Labels</div>
       <div className="label-legend">
         {legend.map((item) => (
           <div
@@ -337,85 +337,90 @@ export default function Calendar({ events, loading, activeCalendars, refetch }: 
         </div>
 
         <div className="calendar-filters">
-          <div className="calendar-connections-status">
-            {connectionPills.map((provider) => {
-              const connections =
-                provider === "ordo"
-                  ? [{ id: "ordo-system", email: "system@ordo" }]
-                  : providerConnections[provider] || [];
-              const connected = connections.length > 0;
+          <div className="calendar-legend-wrap">
+            <div className="connections-legend-wrap">
+              <div className="label-legend-header">Connections</div>
+              <div className="connections-legend-pills">
+                {connectionPills.map((provider) => {
+                  const connections =
+                    provider === "ordo"
+                      ? [{ id: "ordo-system", email: "system@ordo" }]
+                      : providerConnections[provider] || [];
+                  const connected = connections.length > 0;
 
-              return (
-                <div key={provider} className="source-pill-wrapper">
-                  <button
-                    type="button"
-                    className={`source-pill ${provider} ${connected ? "connected" : "inactive"}`}
-                    onClick={() => connected && setActiveProvider(activeProvider === provider ? null : provider)}
-                  >
-                    <span className={`source-dot ${provider}`} />
-                    {connected && connections.length > 0 && provider !== "ordo" && (
-                      <span className="source-count">{connections.length}</span>
-                    )}
-                    {getProviderLabel(provider)}
-                  </button>
-
-                  {activeProvider === provider && (
-                    <div ref={popoverRef} className="provider-popover">
-                      <div className="provider-popover-header">
-                        {getProviderLabel(provider)} accounts
-                      </div>
-                      <div className="provider-popover-list">
-                        {provider === "ordo" ? (
-                          <div className="provider-account-row">
-                            <div className="provider-account-left">
-                              <div className="provider-avatar">O</div>
-                              <div className="provider-account-email">Ordo system</div>
-                            </div>
-                            <div className="provider-account-status active">Active</div>
-                          </div>
-                        ) : (providerConnections[provider] || []).length === 0 ? (
-                          <div className="provider-empty">No accounts connected</div>
-                        ) : (
-                          (providerConnections[provider] || []).map((acct: any) => {
-                            const isExpired = acct.token_expiry
-                              ? new Date(acct.token_expiry) < new Date()
-                              : false;
-                            return (
-                              <div key={acct.id} className="provider-account-row">
-                                <div className="provider-account-left">
-                                  <div className="provider-avatar">{getInitials(acct.email)}</div>
-                                  <div className="provider-account-email">{acct.email}</div>
-                                </div>
-                                <div className={`provider-account-status ${isExpired ? "expired" : "active"}`}>
-                                  {isExpired ? "Expired" : "Active"}
-                                </div>
-                              </div>
-                            );
-                          })
+                  return (
+                    <div key={provider} className="source-pill-wrapper">
+                      <button
+                        type="button"
+                        className={`source-pill ${provider} ${connected ? "connected" : "inactive"}`}
+                        onClick={() => connected && setActiveProvider(activeProvider === provider ? null : provider)}
+                      >
+                        <span className={`source-dot ${provider}`} />
+                        {connected && connections.length > 0 && provider !== "ordo" && (
+                          <span className="source-count">{connections.length}</span>
                         )}
-                      </div>
-                      {provider !== "ordo" && (
-                        <div className="provider-popover-footer">
-                          <button
-                            className="provider-connect-btn"
-                            onClick={() => openModalProvider(provider, "oauth")}
-                          >
-                            Connect another
-                          </button>
+                        {getProviderLabel(provider)}
+                      </button>
+
+                      {activeProvider === provider && (
+                        <div ref={popoverRef} className="provider-popover">
+                          <div className="provider-popover-header">
+                            {getProviderLabel(provider)} accounts
+                          </div>
+                          <div className="provider-popover-list">
+                            {provider === "ordo" ? (
+                              <div className="provider-account-row">
+                                <div className="provider-account-left">
+                                  <div className="provider-avatar">O</div>
+                                  <div className="provider-account-email">Ordo system</div>
+                                </div>
+                                <div className="provider-account-status active">Active</div>
+                              </div>
+                            ) : (providerConnections[provider] || []).length === 0 ? (
+                              <div className="provider-empty">No accounts connected</div>
+                            ) : (
+                              (providerConnections[provider] || []).map((acct: any) => {
+                                const isExpired = acct.token_expiry
+                                  ? new Date(acct.token_expiry) < new Date()
+                                  : false;
+                                return (
+                                  <div key={acct.id} className="provider-account-row">
+                                    <div className="provider-account-left">
+                                      <div className="provider-avatar">{getInitials(acct.email)}</div>
+                                      <div className="provider-account-email">{acct.email}</div>
+                                    </div>
+                                    <div className={`provider-account-status ${isExpired ? "expired" : "active"}`}>
+                                      {isExpired ? "Expired" : "Active"}
+                                    </div>
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                          {provider !== "ordo" && (
+                            <div className="provider-popover-footer">
+                              <button
+                                className="provider-connect-btn"
+                                onClick={() => openModalProvider(provider, "oauth")}
+                              >
+                                Connect another
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
-                  )}
-                </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            </div>
+            <div className="legend-divider"></div>
+            <LabelLegend
+              integrations={activeCalendars}
+              activeLabelFilters={activeLabelFilters}
+              toggleLabelFilter={toggleLabelFilter}
+            />
           </div>
-
-          <LabelLegend
-            integrations={activeCalendars}
-            activeLabelFilters={activeLabelFilters}
-            toggleLabelFilter={toggleLabelFilter}
-          />
 
           <div className="calendar-actions">
             <div className="connections-menu-wrap" ref={connectionsMenuRef}>
