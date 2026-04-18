@@ -764,3 +764,12 @@
 .label-legend-item-text {
   white-space: nowrap;
 }
+
+.displayed-month {
+  font-size: 36px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  color: #fff;
+  margin-bottom: 10px;
+  margin-left: 42px;
+}

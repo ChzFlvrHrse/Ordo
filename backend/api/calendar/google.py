@@ -34,6 +34,21 @@ def _flow(redirect_uri: str) -> Flow:
         redirect_uri=redirect_uri,
     )
 
+def _parse_expiry(value) -> datetime | None:
+    """google-auth stores Credentials.expiry as a naive UTC datetime."""
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=None) if value.tzinfo else value
+    try:
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(pytz.UTC).replace(tzinfo=None)
+    return dt
+
+
 def _credentials(integration: dict) -> google.oauth2.credentials.Credentials:
     return google.oauth2.credentials.Credentials(
         token=integration.get("access_token"),
@@ -42,7 +57,9 @@ def _credentials(integration: dict) -> google.oauth2.credentials.Credentials:
         client_id=os.environ.get("GOOGLE_CLIENT_ID"),
         client_secret=os.environ.get("GOOGLE_CLIENT_SECRET"),
         scopes=integration.get("scopes"),
+        expiry=_parse_expiry(integration.get("token_expiry")),
     )
+
 
 async def get_refreshed_credentials(app_id: str, user_id: str,
                                      provider: str = "google", email: str = None):
@@ -52,7 +69,16 @@ async def get_refreshed_credentials(app_id: str, user_id: str,
 
     credentials = _credentials(integration)
 
-    if credentials.expired or not credentials.token:
+    # Refresh a bit before actual expiry so Google never returns 401 mid-request.
+    skew = timedelta(minutes=5)
+    expiry = credentials.expiry  # naive UTC
+    needs_refresh = (
+        not credentials.token
+        or expiry is None
+        or datetime.utcnow() + skew >= expiry
+    )
+
+    if needs_refresh:
         credentials.refresh(google.auth.transport.requests.Request())
         db.upsert_integration(
             app_id=app_id,
@@ -135,7 +161,7 @@ async def google_calendar_exchange():
         email = user_info.get("email")
 
         calendar_id = (
-            build("calendar", "v3", credentials=creds)
+            build("calendar", "v3", credentials=creds, cache_discovery=False)
             .calendars().get(calendarId="primary").execute()
             .get("id")
         )
@@ -209,50 +235,24 @@ async def google_calendar_disconnect():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
-@google_calendar_bp.route('/config', methods=['PUT'])
-@require_api_key
-async def google_calendar_config():
-    try:
-        data = await request.get_json()
-        user_id = data.get("user_id")
-        email = data.get("email")
-        lookahead_weeks = data.get("lookahead_weeks")
-        timezone = data.get("timezone")
-
-        if not user_id or not email or not lookahead_weeks or not timezone:
-            return jsonify({"error": "user_id, email, lookahead_weeks, and timezone are required"}), 400
-
-        integration = db.update_integration_config(
-            app_id=request.ordo_app["id"],
-            user_id=user_id,
-            provider="google",
-            email=email,
-            lookahead_weeks=lookahead_weeks,
-            timezone=timezone,
-            available_days=data.get("available_days"),
-            available_start=data.get("available_start"),
-            available_end=data.get("available_end"),
-        )
-        return jsonify({"integration": integration, "success": True})
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
 @google_calendar_bp.route('/events', methods=['GET'])
 @require_api_key
 async def google_calendar_events():
     try:
         user_id = request.args.get("user_id")
-        email = request.args.get("email")  # optional — fetch specific account
+        email = request.args.get("email")
+
+        start_param = request.args.get("start")  # YYYY-MM-DD or ISO datetime
+        end_param = request.args.get("end")      # YYYY-MM-DD or ISO datetime
 
         if not user_id:
             return jsonify({"error": "user_id is required"}), 400
 
-        logger.info(f"=== GOOGLE CALENDAR EVENTS: app={request.ordo_app['name']} user_id={user_id} email={email} ===")
+        logger.info(
+            f"=== GOOGLE CALENDAR EVENTS: app={request.ordo_app['name']} "
+            f"user_id={user_id} email={email} start={start_param} end={end_param} ==="
+        )
 
-        # If email specified, fetch that account only. Otherwise fetch all.
         if email:
             integrations = [db.get_integration(request.ordo_app["id"], user_id, "google", email=email)]
             integrations = [i for i in integrations if i]
@@ -276,21 +276,65 @@ async def google_calendar_events():
 
                 tz_name = integration.get("timezone") or "America/New_York"
                 tz = pytz.timezone(tz_name)
-                now = datetime.now(tz)
-                end = now + timedelta(weeks=integration.get("lookahead_weeks") or 2)
 
-                service = build("calendar", "v3", credentials=credentials)
-                items = service.events().list(
-                    calendarId=calendar_id,
-                    timeMin=now.isoformat(),
-                    timeMax=end.isoformat(),
-                    singleEvents=True,
-                    orderBy="startTime",
-                ).execute().get("items", [])
+                # Build requested time window
+                if start_param and end_param:
+                    try:
+                        parsed_start = datetime.fromisoformat(start_param.replace("Z", "+00:00"))
+                        parsed_end = datetime.fromisoformat(end_param.replace("Z", "+00:00"))
+                    except ValueError:
+                        try:
+                            parsed_start = datetime.strptime(start_param, "%Y-%m-%d")
+                            parsed_end = datetime.strptime(end_param, "%Y-%m-%d")
+                        except ValueError:
+                            return jsonify({
+                                "error": "start and end must be valid ISO datetimes or YYYY-MM-DD"
+                            }), 400
 
-                # Tag each event with the account email
-                for item in items:
-                    item["_ordo_account"] = integration["email"]
+                    if parsed_start.tzinfo is None:
+                        start = tz.localize(parsed_start)
+                    else:
+                        start = parsed_start.astimezone(tz)
+
+                    if parsed_end.tzinfo is None:
+                        end = tz.localize(parsed_end)
+                    else:
+                        end = parsed_end.astimezone(tz)
+
+                    if end <= start:
+                        return jsonify({"error": "end must be after start"}), 400
+
+                elif start_param or end_param:
+                    return jsonify({"error": "Pass both start and end together"}), 400
+
+                else:
+                    start = datetime.now(tz)
+                    end = start + timedelta(weeks=integration.get("lookahead_weeks") or 4)
+
+                service = build("calendar", "v3", credentials=credentials, cache_discovery=False)
+
+                items = []
+                page_token = None
+
+                while True:
+                    response = service.events().list(
+                        calendarId=calendar_id,
+                        timeMin=start.isoformat(),
+                        timeMax=end.isoformat(),
+                        singleEvents=True,
+                        orderBy="startTime",
+                        pageToken=page_token,
+                    ).execute()
+
+                    batch = response.get("items", [])
+                    for item in batch:
+                        item["_ordo_account"] = integration["email"]
+
+                    items.extend(batch)
+
+                    page_token = response.get("nextPageToken")
+                    if not page_token:
+                        break
 
                 available_days = integration.get("available_days")
                 available_start = integration.get("available_start")
@@ -298,19 +342,33 @@ async def google_calendar_events():
 
                 if available_days or available_start:
                     from datetime import time as time_type
+
                     filtered = []
                     for event in items:
-                        dt_str = (event.get("start") or {}).get("dateTime") or (event.get("start") or {}).get("date")
+                        start_obj = event.get("start") or {}
+                        dt_str = start_obj.get("dateTime") or start_obj.get("date")
                         if not dt_str:
                             continue
-                        dt = datetime.fromisoformat(dt_str).astimezone(tz)
+
+                        if "T" in dt_str:
+                            dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00")).astimezone(tz)
+                        else:
+                            dt = tz.localize(datetime.strptime(dt_str, "%Y-%m-%d"))
+
                         if available_days and dt.isoweekday() not in available_days:
                             continue
+
                         if available_start and available_end:
                             t = dt.time().replace(tzinfo=None)
-                            if not (time_type.fromisoformat(available_start) <= t <= time_type.fromisoformat(available_end)):
+                            if not (
+                                time_type.fromisoformat(available_start)
+                                <= t
+                                <= time_type.fromisoformat(available_end)
+                            ):
                                 continue
+
                         filtered.append(event)
+
                     items = filtered
 
                 all_events.extend(items)
@@ -319,14 +377,21 @@ async def google_calendar_events():
                 logger.error(f"=== ORDO: Error fetching events for {integration.get('email')}: {e} ===")
                 continue
 
-        # Sort merged events by start time
         def sort_key(e):
-            start = (e.get("start") or {}).get("dateTime") or (e.get("start") or {}).get("date") or ""
-            return start
+            start_obj = e.get("start") or {}
+            return start_obj.get("dateTime") or start_obj.get("date") or ""
 
         all_events.sort(key=sort_key)
 
-        return jsonify({"events": all_events, "success": True, "count": len(all_events)})
+        return jsonify({
+            "events": all_events,
+            "success": True,
+            "count": len(all_events),
+            "range": {
+                "start": start_param,
+                "end": end_param,
+            },
+        })
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -375,7 +440,7 @@ async def google_calendar_book():
                 }
             }
 
-        service = build("calendar", "v3", credentials=credentials)
+        service = build("calendar", "v3", credentials=credentials, cache_discovery=False)
         insert_kwargs = {
             "calendarId": integration.get("calendar_id"),
             "body": event_body,
@@ -408,7 +473,7 @@ async def google_calendar_cancel():
             request.ordo_app["id"], user_id, "google", email=email
         )
 
-        service = build("calendar", "v3", credentials=credentials)
+        service = build("calendar", "v3", credentials=credentials, cache_discovery=False)
         service.events().delete(
             calendarId=integration.get("calendar_id"),
             eventId=event_id,
@@ -441,7 +506,7 @@ async def google_calendar_reschedule():
         )
 
         tz_name = integration.get("timezone") or "America/New_York"
-        service = build("calendar", "v3", credentials=credentials)
+        service = build("calendar", "v3", credentials=credentials, cache_discovery=False)
 
         existing = service.events().get(
             calendarId=integration.get("calendar_id"),

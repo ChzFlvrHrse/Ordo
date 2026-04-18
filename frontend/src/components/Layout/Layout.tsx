@@ -8,10 +8,36 @@ import toast from "react-hot-toast";
 import "./Layout.css";
 
 export default function Layout() {
-  const { events, loading: eventsLoading, refetch } = useEvents();
-  const { messages, loading: agentLoading, error, sendMessage } = useAgent(refetch);
   const [activeCalendars, setActiveCalendars] = useState<any[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [date, setDate] = useState(new Date());
+  const [visibleRange, setVisibleRange] = useState<{ start: Date; end: Date } | null>(null);
+
+  const updateVisibleRange = useCallback((next: { start: Date; end: Date }) => {
+    setVisibleRange((prev) => {
+      if (
+        prev &&
+        prev.start.getTime() === next.start.getTime() &&
+        prev.end.getTime() === next.end.getTime()
+      ) {
+        return prev;
+      }
+      return next;
+    });
+  }, []);
+
+  const {
+    events,
+    integrations,
+    loading: eventsLoading,
+    refetch,
+    ensureMonthsLoaded,
+  } = useEvents({
+    visibleStart: visibleRange?.start ?? null,
+    visibleEnd: visibleRange?.end ?? null,
+  });
+
+  const { messages, loading: agentLoading, error, sendMessage } = useAgent(refetch);
 
   const onMouseDown = useCallback(() => setDragging(true), []);
   const onMouseMove = useCallback((e: React.MouseEvent) => {
@@ -19,30 +45,38 @@ export default function Layout() {
   }, [dragging]);
   const onMouseUp = useCallback(() => setDragging(false), []);
 
-  const fetchActiveCalendars = async () => {
+  const fetchActiveCalendars = useCallback(async () => {
     try {
-      const result = await fetch(`${config.apiBaseUrl}/integrations/calendars?user_id=${config.userId}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "X-API-Key": config.apiKey,
+      const result = await fetch(
+        `${config.apiBaseUrl}/integrations/calendars?user_id=${config.userId}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            "X-API-Key": config.apiKey,
+          },
         }
-      });
+      );
 
-      if (!result.ok) {
-        return;
-      }
+      if (!result.ok) return;
+
       const data = await result.json();
       setActiveCalendars(data.calendars ?? []);
     } catch (error) {
       toast.error("Could not load calendar connections");
       setActiveCalendars([]);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchActiveCalendars();
-  }, []);
+  }, [fetchActiveCalendars]);
+
+  useEffect(() => {
+    if (integrations.length > 0) {
+      setActiveCalendars(integrations);
+    }
+  }, [integrations]);
 
   return (
     <div
@@ -56,12 +90,20 @@ export default function Layout() {
             events={events}
             loading={eventsLoading}
             activeCalendars={activeCalendars}
-            refetch={fetchActiveCalendars}
+            date={date}
+            setDate={setDate}
+            setVisibleRange={updateVisibleRange}
+            ensureMonthsLoaded={ensureMonthsLoaded}
+            refetch={async () => {
+              await Promise.all([fetchActiveCalendars(), refetch()]);
+            }}
           />
         </div>
+
         <div className="layout-divider" onMouseDown={onMouseDown}>
           <div className="divider-handle" />
         </div>
+
         <div className="layout-agent">
           <AgentChat
             messages={messages}

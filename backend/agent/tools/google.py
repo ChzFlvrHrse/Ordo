@@ -89,7 +89,7 @@ TOOL_DEFINITIONS = [
 
 async def _get_service(app_id: str, user_id: str, email: str = None):
     credentials, integration = await get_refreshed_credentials(app_id, user_id, "google", email=email)
-    service = build("calendar", "v3", credentials=credentials)
+    service = build("calendar", "v3", credentials=credentials, cache_discovery=False)
     return service, integration
 
 
@@ -113,7 +113,7 @@ async def get_events(app_id: str, user_id: str, email: str = None,
                 credentials, integration = await get_refreshed_credentials(
                     app_id, user_id, "google", email=integration["email"]
                 )
-                service = build("calendar", "v3", credentials=credentials)
+                service = build("calendar", "v3", credentials=credentials, cache_discovery=False)
 
                 tz_name = integration.get("timezone") or "America/New_York"
                 tz = pytz.timezone(tz_name)

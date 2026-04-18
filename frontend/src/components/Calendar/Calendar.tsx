@@ -1,9 +1,9 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
-import { EventClickArg, EventContentArg } from "@fullcalendar/core";
+import { DatesSetArg, EventClickArg, EventContentArg } from "@fullcalendar/core";
 import { ChevronDown, Link2, Tag } from "lucide-react";
 import toast from "react-hot-toast";
 import { OrdoEvent } from "../../hooks/useEvents";
@@ -16,6 +16,10 @@ interface CalendarProps {
   events: OrdoEvent[];
   loading: boolean;
   activeCalendars: any[];
+  date: Date;
+  setDate: (date: Date) => void;
+  setVisibleRange: (range: { start: Date; end: Date }) => void;
+  ensureMonthsLoaded: (start: Date | null, end: Date | null) => Promise<void>;
   refetch: () => Promise<void> | void;
 }
 
@@ -82,7 +86,7 @@ function LabelLegend({
       <div className="label-legend-wrap">
         <div className="label-legend-header">Labels</div>
         <div className="label-legend">
-          {legend.map((item) => (
+          {legend.map((item: any) => (
             <div
               key={item.label}
               onClick={() => toggleLabelFilter(item.label)}
@@ -100,7 +104,22 @@ function LabelLegend({
 
 const VIEWS = ["Week", "Month", "Day"];
 
-export default function Calendar({ events, loading, activeCalendars, refetch }: CalendarProps) {
+function viewLabelFromType(type: string) {
+  if (type === "timeGridWeek") return "Week";
+  if (type === "timeGridDay") return "Day";
+  return "Month";
+}
+
+export default function Calendar({
+  events,
+  loading,
+  activeCalendars,
+  date,
+  setDate,
+  setVisibleRange,
+  ensureMonthsLoaded,
+  refetch,
+}: CalendarProps) {
   const calendarRef = useRef<FullCalendar>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const connectionsMenuRef = useRef<HTMLDivElement | null>(null);
@@ -133,44 +152,51 @@ export default function Calendar({ events, loading, activeCalendars, refetch }: 
         setShowConnectionsMenu(false);
       }
     };
+
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   const toggleLabelFilter = (label: string) => {
-    setActiveLabelFilters(prev =>
-      prev.includes(label) ? prev.filter(l => l !== label) : [...prev, label]
+    setActiveLabelFilters((prev) =>
+      prev.includes(label) ? prev.filter((l) => l !== label) : [...prev, label]
     );
   };
 
   const googleConnected = (providerConnections.google || []).length > 0;
   const outlookConnected = (providerConnections.outlook || []).length > 0;
 
-  const filteredEvents = activeLabelFilters.length === 0
-    ? events
-    : events.filter(e => e.label && activeLabelFilters.includes(e.label));
+  const filteredEvents = useMemo(() => {
+    if (activeLabelFilters.length === 0) return events;
+    return events.filter((e) => e.label && activeLabelFilters.includes(e.label));
+  }, [events, activeLabelFilters]);
 
-  const calendarEvents = filteredEvents.map((e) => ({
-    id: e.id,
-    title: e.title,
-    start: e.start,
-    end: e.end,
-    extendedProps: {
-      provider: e.provider,
-      color: e.color,
-      label: e.label,
-      location: e.location,
-      description: e.description,
-      attendees: e.attendees,
-    },
-  }));
+  const calendarEvents = useMemo(
+    () =>
+      filteredEvents.map((e) => ({
+        id: e.id,
+        title: e.title,
+        start: e.start,
+        end: e.end,
+        extendedProps: {
+          provider: e.provider,
+          color: e.color,
+          label: e.label,
+          location: e.location,
+          description: e.description,
+          attendees: e.attendees,
+        },
+      })),
+    [filteredEvents]
+  );
 
   const handleViewChange = (view: string) => {
-    setActiveView(view);
     const api = calendarRef.current?.getApi();
-    if (view === "Week") api?.changeView("timeGridWeek");
-    if (view === "Month") api?.changeView("dayGridMonth");
-    if (view === "Day") api?.changeView("timeGridDay");
+    if (!api) return;
+
+    if (view === "Week") api.changeView("timeGridWeek");
+    if (view === "Month") api.changeView("dayGridMonth");
+    if (view === "Day") api.changeView("timeGridDay");
   };
 
   const handlePrev = () => calendarRef.current?.getApi().prev();
@@ -182,6 +208,14 @@ export default function Calendar({ events, loading, activeCalendars, refetch }: 
     day: "numeric",
     year: "numeric",
   });
+  const displayedMonth = () => {
+    const api = calendarRef.current?.getApi();
+    if (!api) return null;
+    return new Date(api.view.currentStart).toLocaleDateString("en-US", {
+      month: "long",
+      // year: "numeric",
+    });
+  }
 
   const handleEventClick = (arg: EventClickArg) => {
     console.log("Event clicked:", arg.event.title);
@@ -216,7 +250,7 @@ export default function Calendar({ events, loading, activeCalendars, refetch }: 
     setLabelsLoading(true);
     try {
       await Promise.all(
-        items.map(item =>
+        items.map((item) =>
           fetch(`${config.apiBaseUrl}/integrations/labels`, {
             method: "PUT",
             headers: {
@@ -248,6 +282,7 @@ export default function Calendar({ events, loading, activeCalendars, refetch }: 
       setActiveProvider(provider);
       return;
     }
+
     switch (provider) {
       case "google":
         setShowAuthModal("google");
@@ -260,12 +295,25 @@ export default function Calendar({ events, loading, activeCalendars, refetch }: 
       default:
         break;
     }
+
     setShowConnectionsMenu(false);
   };
 
   const connectionPills = ["ordo", "google", "outlook"];
-  const getProviderLabel = (provider: string) => provider.charAt(0).toUpperCase() + provider.slice(1);
+  const getProviderLabel = (provider: string) =>
+    provider.charAt(0).toUpperCase() + provider.slice(1);
   const getInitials = (email: string) => email?.charAt(0)?.toUpperCase() || "?";
+
+  const handleDatesSet = async (info: DatesSetArg) => {
+    setActiveView(viewLabelFromType(info.view.type));
+    setDate(new Date(info.view.currentStart));
+    setVisibleRange({
+      start: new Date(info.start),
+      end: new Date(info.end),
+    });
+
+    await ensureMonthsLoaded(new Date(info.start), new Date(info.end));
+  };
 
   return (
     <>
@@ -295,7 +343,16 @@ export default function Calendar({ events, loading, activeCalendars, refetch }: 
             <div className="calendar-logo-icon">
               {ordoLogo()}
               <div className="calendar-logo-sparkle">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#a5f3fc" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#a5f3fc"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <path d="M12 2L9.5 9.5 2 12l7.5 2.5L12 22l2.5-7.5L22 12l-7.5-2.5z" />
                 </svg>
               </div>
@@ -322,7 +379,16 @@ export default function Calendar({ events, loading, activeCalendars, refetch }: 
         <div className="calendar-toolbar">
           <div className="calendar-title-group">
             <span className="calendar-badge">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <path d="M15 4V2M15 4V6M15 4H10.5M3 10V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19V10H3ZM3 10V6C3 4.9 3.9 4 5 4H7" />
                 <path d="M7 2V6" />
                 <path d="M21 10V6C21 4.9 20.1 4 19 4H18.5" />
@@ -331,6 +397,7 @@ export default function Calendar({ events, loading, activeCalendars, refetch }: 
             </span>
             <div className="calendar-month">{todaysDate}</div>
           </div>
+
 
           <div className="calendar-nav">
             <button className="calendar-nav-btn" onClick={handlePrev}>‹</button>
@@ -356,7 +423,9 @@ export default function Calendar({ events, loading, activeCalendars, refetch }: 
                       <button
                         type="button"
                         className={`source-pill ${provider} ${connected ? "connected" : "inactive"}`}
-                        onClick={() => connected && setActiveProvider(activeProvider === provider ? null : provider)}
+                        onClick={() =>
+                          connected && setActiveProvider(activeProvider === provider ? null : provider)
+                        }
                       >
                         <span className={`source-dot ${provider}`} />
                         {connected && connections.length > 0 && provider !== "ordo" && (
@@ -386,13 +455,16 @@ export default function Calendar({ events, loading, activeCalendars, refetch }: 
                                 const isExpired = acct.token_expiry
                                   ? new Date(acct.token_expiry) < new Date()
                                   : false;
+
                                 return (
                                   <div key={acct.id} className="provider-account-row">
                                     <div className="provider-account-left">
                                       <div className="provider-avatar">{getInitials(acct.email)}</div>
                                       <div className="provider-account-email">{acct.email}</div>
                                     </div>
-                                    <div className={`provider-account-status ${isExpired ? "expired" : "active"}`}>
+                                    <div
+                                      className={`provider-account-status ${isExpired ? "expired" : "active"}`}
+                                    >
                                       {isExpired ? "Expired" : "Active"}
                                     </div>
                                   </div>
@@ -400,6 +472,7 @@ export default function Calendar({ events, loading, activeCalendars, refetch }: 
                               })
                             )}
                           </div>
+
                           {provider !== "ordo" && (
                             <div className="provider-popover-footer">
                               <button
@@ -417,6 +490,7 @@ export default function Calendar({ events, loading, activeCalendars, refetch }: 
                 })}
               </div>
             </div>
+
             <LabelLegend
               integrations={activeCalendars}
               activeLabelFilters={activeLabelFilters}
@@ -438,6 +512,7 @@ export default function Calendar({ events, loading, activeCalendars, refetch }: 
                 <Tag size={14} />
                 Labels
               </button>
+
               <button
                 type="button"
                 className="oauth-action-btn"
@@ -474,7 +549,16 @@ export default function Calendar({ events, loading, activeCalendars, refetch }: 
             </div>
 
             <div className="filter-pill">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
               </svg>
               Filters
@@ -482,6 +566,10 @@ export default function Calendar({ events, loading, activeCalendars, refetch }: 
 
             {loading && <span className="calendar-loading">Syncing...</span>}
           </div>
+        </div>
+
+        <div className="displayed-month">
+          {displayedMonth()}
         </div>
 
         <div className="calendar-grid-wrap">
@@ -499,6 +587,7 @@ export default function Calendar({ events, loading, activeCalendars, refetch }: 
             slotMaxTime="22:00:00"
             allDaySlot={true}
             dayMaxEvents={3}
+            datesSet={handleDatesSet}
           />
         </div>
       </div>
