@@ -41,15 +41,7 @@ export default function AgentChat({ messages, loading, error, onSend }: AgentCha
     const bottomRef = useRef<HTMLDivElement>(null);
 
     const { speak, stop: stopSpeaking, speakingId } = useTTS();
-    const {
-        listening,
-        transcript,
-        wakeActive,
-        start,
-        stop: stopListening,
-        enableWakeWord,
-        disableWakeWord,
-    } = useSTT();
+    const { listening, transcript, start, stop: stopListening } = useSTT();
     const wasListening = useRef(false);
 
     useEffect(() => {
@@ -117,7 +109,6 @@ export default function AgentChat({ messages, loading, error, onSend }: AgentCha
             stopListening();
             return;
         }
-        enableWakeWord();
         start();
     };
 
@@ -240,32 +231,16 @@ export default function AgentChat({ messages, loading, error, onSend }: AgentCha
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={handleKey}
-                            placeholder="Move Friday's calls to the afternoon…"
+                            placeholder="Ask about your calendar…"
                             rows={1}
                         />
 
                         <button
                             type="button"
-                            className={`agent-mic ${listening ? "active" : ""} ${wakeActive ? "wake" : ""}`}
+                            className={`agent-mic ${listening ? "active" : ""}`}
                             onClick={handleMicClick}
-                            onContextMenu={(e) => {
-                                e.preventDefault();
-                                wakeActive ? disableWakeWord() : enableWakeWord();
-                            }}
-                            aria-label={
-                                listening
-                                    ? "Stop listening"
-                                    : wakeActive
-                                        ? "Listening for \"Hey Ordo\" (right-click to disable)"
-                                        : "Speak into microphone"
-                            }
-                            title={
-                                listening
-                                    ? "Stop listening"
-                                    : wakeActive
-                                        ? "Listening for \"Hey Ordo\" (right-click to disable)"
-                                        : "Speak into microphone (right-click to enable wake word)"
-                            }
+                            aria-label={listening ? "Stop listening" : "Speak into microphone"}
+                            title={listening ? "Stop listening" : "Speak into microphone"}
                         >
                             {listening ? <Square size={16} /> : <Mic size={16} />}
                         </button>
