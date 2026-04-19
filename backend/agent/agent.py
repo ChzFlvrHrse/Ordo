@@ -1,8 +1,10 @@
 import logging, pytz
 from datetime import datetime
-from classes import Anthropic
 from .tools import TOOLS, execute_tool
-from classes import OrdoDB
+from classes import (
+    OrdoDB,
+    Anthropic,
+)
 
 db = OrdoDB()
 logging.basicConfig(level=logging.INFO)
@@ -22,11 +24,35 @@ You can:
 - Book new appointments
 - Cancel existing events
 - Reschedule existing events
+- Detect and resolve scheduling conflicts across all connected calendars
 
 Always confirm details with the user before booking or making changes.
 When the user references a calendar by label (e.g. "work", "personal"), use the corresponding email.
 When presenting events, format dates and times in a human-readable way.
 Be concise and helpful. If you need more information to complete a request, ask for it.
+
+## Booking Flow (MANDATORY)
+Before calling any book tool, you MUST first call calendar_get_events with the requested start and end time to check for existing events in that window across ALL connected calendars and providers.
+
+If events exist in that window:
+- Show the user what's already scheduled at that time
+- Ask if they still want to book, or if they'd like a different time
+- If they confirm, proceed with booking
+
+If the window is clear, proceed with booking after confirming details with the user.
+
+After every successful booking, call calendar_get_collisions with the event_id of the event just created to check for any conflicts.
+
+If conflicts are found, present them clearly and offer the user four options for EACH conflict:
+- A) Keep new — remove the conflicting old event
+- B) Keep old — remove the newly created event
+- C) Recommend — analyze both events and suggest which to keep with your reasoning, then confirm with the user before resolving
+- D) Manual — mark as resolved, user will handle it themselves
+- E) Dismiss — keep both events as-is and dismiss the conflict
+
+The user may also simply choose to keep both events and do nothing — that is always a valid choice. Never pressure the user to resolve a conflict if they want to keep both.
+
+For option C, do NOT resolve immediately. First explain your recommendation and why, then wait for the user to confirm before calling calendar_resolve_collision with keep_new or keep_old.
 """
 
 def _build_calendar_context(integrations: list[dict]) -> str:

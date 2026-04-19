@@ -533,6 +533,26 @@ class OrdoDB:
             ).fetchone()
             return self._deserialize_collision(dict(row)) if row else None
 
+    def resolve_expired_collisions(self, user_id: str = None) -> int:
+        """Mark pending collisions as resolved if the new event's start time has passed."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self._conn() as conn:
+            if user_id:
+                cur = conn.execute(
+                    """UPDATE collision_notifications
+                       SET status = 'resolved', resolution = 'expired'
+                       WHERE status = 'pending' AND user_id = ? AND new_event_start < ?""",
+                    (user_id, now)
+                )
+            else:
+                cur = conn.execute(
+                    """UPDATE collision_notifications
+                       SET status = 'resolved', resolution = 'expired'
+                       WHERE status = 'pending' AND new_event_start < ?""",
+                    (now,)
+                )
+            return cur.rowcount
+
     def _deserialize_collision(self, row: dict) -> dict:
         if row.get("colliding_events") and isinstance(row["colliding_events"], str):
             try:

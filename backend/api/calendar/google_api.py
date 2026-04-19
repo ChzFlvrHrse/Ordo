@@ -1,17 +1,23 @@
-import os, pytz, logging, google.oauth2.credentials, google.auth.transport.requests, uuid
+import os
+import pytz
+import uuid
+import logging
+from classes import OrdoDB
+from functools import wraps
+import google.oauth2.credentials
+import google.auth.transport.requests
+from datetime import datetime, timedelta
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
-from datetime import datetime, timedelta
-from functools import wraps
 from quart import Blueprint, request, jsonify, redirect
-from classes import OrdoDB
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 db = OrdoDB()
 
-google_calendar_bp = Blueprint('google_calendar', __name__, url_prefix='/google_calendar')
+google_calendar_bp = Blueprint(
+    'google_calendar', __name__, url_prefix='/google_calendar')
 
 SCOPES = [
     "https://www.googleapis.com/auth/calendar.events",
@@ -19,6 +25,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/userinfo.email",
     "openid",
 ]
+
 
 def _flow(redirect_uri: str) -> Flow:
     return Flow.from_client_config(
@@ -33,6 +40,7 @@ def _flow(redirect_uri: str) -> Flow:
         scopes=SCOPES,
         redirect_uri=redirect_uri,
     )
+
 
 def _parse_expiry(value) -> datetime | None:
     """google-auth stores Credentials.expiry as a naive UTC datetime."""
@@ -62,10 +70,11 @@ def _credentials(integration: dict) -> google.oauth2.credentials.Credentials:
 
 
 async def get_refreshed_credentials(app_id: str, user_id: str,
-                                     provider: str = "google", email: str = None):
+                                    provider: str = "google", email: str = None):
     integration = db.get_integration(app_id, user_id, provider, email=email)
     if not integration:
-        raise ValueError(f"No {provider} calendar integration found for user {user_id}")
+        raise ValueError(
+            f"No {provider} calendar integration found for user {user_id}")
 
     credentials = _credentials(integration)
 
@@ -87,7 +96,8 @@ async def get_refreshed_credentials(app_id: str, user_id: str,
             access_token=credentials.token,
             token_expiry=credentials.expiry.isoformat() if credentials.expiry else None,
         )
-        logger.info(f"=== ORDO: Refreshed token app={app_id} user={user_id} email={integration['email']} ===")
+        logger.info(
+            f"=== ORDO: Refreshed token app={app_id} user={user_id} email={integration['email']} ===")
 
     return credentials, integration
 
@@ -161,7 +171,8 @@ async def google_calendar_exchange():
         flow.fetch_token(code=code)
         creds = flow.credentials
 
-        user_info = build("oauth2", "v2", credentials=creds).userinfo().get().execute()
+        user_info = build(
+            "oauth2", "v2", credentials=creds).userinfo().get().execute()
         email = user_info.get("email")
 
         calendar_id = (
@@ -186,12 +197,15 @@ async def google_calendar_exchange():
         # Register webhook watch
         try:
             register_google_watch(app_id, user_id, email=email)
-            logger.info(f"=== ORDO: Registered Google watch app={app_id} user={user_id} ===")
+            logger.info(
+                f"=== ORDO: Registered Google watch app={app_id} user={user_id} ===")
         except Exception as e:
-            logger.warning(f"=== ORDO: Failed to register Google watch: {e} ===")
+            logger.warning(
+                f"=== ORDO: Failed to register Google watch: {e} ===")
             # Non-fatal — don't block the OAuth flow
 
-        logger.info(f"=== ORDO: Connected google calendar app={app_id} user={user_id} email={email} ===")
+        logger.info(
+            f"=== ORDO: Connected google calendar app={app_id} user={user_id} email={email} ===")
         return redirect(post_exchange_uri)
 
     except Exception as e:
@@ -210,11 +224,12 @@ async def google_calendar_status():
         if not user_id:
             return jsonify({"error": "user_id is required"}), 400
 
-        integrations = db.get_integrations_by_provider(request.ordo_app["id"], user_id, "google")
+        integrations = db.get_integrations_by_provider(
+            request.ordo_app["id"], user_id, "google")
         sanitized = [
             {k: i[k] for k in ("id", "email", "created_at", "provider",
-                                "lookahead_weeks", "timezone", "available_days",
-                                "available_start", "available_end", "label", "color") if k in i}
+                               "lookahead_weeks", "timezone", "available_days",
+                               "available_start", "available_end", "label", "color") if k in i}
             for i in integrations
         ]
 
@@ -242,7 +257,8 @@ async def google_calendar_disconnect():
         if not email:
             return jsonify({"error": "email is required"}), 400
 
-        deleted = db.delete_integration(request.ordo_app["id"], user_id, "google", email)
+        deleted = db.delete_integration(
+            request.ordo_app["id"], user_id, "google", email)
         if not deleted:
             return jsonify({"error": "Integration not found"}), 404
 
@@ -274,10 +290,12 @@ async def google_calendar_events():
         )
 
         if email:
-            integrations = [db.get_integration(request.ordo_app["id"], user_id, "google", email=email)]
+            integrations = [db.get_integration(
+                request.ordo_app["id"], user_id, "google", email=email)]
             integrations = [i for i in integrations if i]
         else:
-            integrations = db.get_integrations_by_provider(request.ordo_app["id"], user_id, "google")
+            integrations = db.get_integrations_by_provider(
+                request.ordo_app["id"], user_id, "google")
 
         if not integrations:
             return jsonify({"error": "No Google Calendar integration found"}), 404
@@ -299,12 +317,16 @@ async def google_calendar_events():
 
                 if start_param and end_param:
                     try:
-                        parsed_start = datetime.fromisoformat(start_param.replace("Z", "+00:00"))
-                        parsed_end = datetime.fromisoformat(end_param.replace("Z", "+00:00"))
+                        parsed_start = datetime.fromisoformat(
+                            start_param.replace("Z", "+00:00"))
+                        parsed_end = datetime.fromisoformat(
+                            end_param.replace("Z", "+00:00"))
                     except ValueError:
                         try:
-                            parsed_start = datetime.strptime(start_param, "%Y-%m-%d")
-                            parsed_end = datetime.strptime(end_param, "%Y-%m-%d")
+                            parsed_start = datetime.strptime(
+                                start_param, "%Y-%m-%d")
+                            parsed_end = datetime.strptime(
+                                end_param, "%Y-%m-%d")
                         except ValueError:
                             return jsonify({
                                 "error": "start and end must be valid ISO datetimes or YYYY-MM-DD"
@@ -328,9 +350,12 @@ async def google_calendar_events():
 
                 else:
                     start = datetime.now(tz)
-                    end = start + timedelta(weeks=integration.get("lookahead_weeks") or 4)
+                    end = start + \
+                        timedelta(weeks=integration.get(
+                            "lookahead_weeks") or 4)
 
-                service = build("calendar", "v3", credentials=credentials, cache_discovery=False)
+                service = build("calendar", "v3",
+                                credentials=credentials, cache_discovery=False)
 
                 items = []
                 page_token = None
@@ -365,14 +390,17 @@ async def google_calendar_events():
                     filtered = []
                     for event in items:
                         start_obj = event.get("start") or {}
-                        dt_str = start_obj.get("dateTime") or start_obj.get("date")
+                        dt_str = start_obj.get(
+                            "dateTime") or start_obj.get("date")
                         if not dt_str:
                             continue
 
                         if "T" in dt_str:
-                            dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00")).astimezone(tz)
+                            dt = datetime.fromisoformat(
+                                dt_str.replace("Z", "+00:00")).astimezone(tz)
                         else:
-                            dt = tz.localize(datetime.strptime(dt_str, "%Y-%m-%d"))
+                            dt = tz.localize(
+                                datetime.strptime(dt_str, "%Y-%m-%d"))
 
                         if available_days and dt.isoweekday() not in available_days:
                             continue
@@ -393,7 +421,8 @@ async def google_calendar_events():
                 all_events.extend(items)
 
             except Exception as e:
-                logger.error(f"=== ORDO: Error fetching events for {integration.get('email')}: {e} ===")
+                logger.error(
+                    f"=== ORDO: Error fetching events for {integration.get('email')}: {e} ===")
                 continue
 
         def sort_key(e):
@@ -436,9 +465,11 @@ async def google_calendar_book():
         description = args.get("description")
         add_meet = args.get("add_meet", False)
 
-        logger.info(f"=== GOOGLE CALENDAR BOOK: app={request.ordo_app['name']} user_id={user_id} email={email} title={title} ===")
+        logger.info(
+            f"=== GOOGLE CALENDAR BOOK: app={request.ordo_app['name']} user_id={user_id} email={email} title={title} ===")
 
-        missing = [k for k, v in {"user_id": user_id, "title": title, "start_time": start_time, "end_time": end_time, "attendee_emails": attendee_emails}.items() if not v]
+        missing = [k for k, v in {"user_id": user_id, "title": title, "start_time": start_time,
+                                  "end_time": end_time, "attendee_emails": attendee_emails}.items() if not v]
         if missing:
             return jsonify({"error": f"Missing required fields: {', '.join(missing)}", "success": False}), 400
 
@@ -463,7 +494,8 @@ async def google_calendar_book():
                 }
             }
 
-        service = build("calendar", "v3", credentials=credentials, cache_discovery=False)
+        service = build("calendar", "v3",
+                        credentials=credentials, cache_discovery=False)
         insert_kwargs = {
             "calendarId": integration.get("calendar_id"),
             "body": event_body,
@@ -496,7 +528,8 @@ async def google_calendar_cancel():
             request.ordo_app["id"], user_id, "google", email=email
         )
 
-        service = build("calendar", "v3", credentials=credentials, cache_discovery=False)
+        service = build("calendar", "v3",
+                        credentials=credentials, cache_discovery=False)
         service.events().delete(
             calendarId=integration.get("calendar_id"),
             eventId=event_id,
@@ -529,7 +562,8 @@ async def google_calendar_reschedule():
         )
 
         tz_name = integration.get("timezone") or "America/New_York"
-        service = build("calendar", "v3", credentials=credentials, cache_discovery=False)
+        service = build("calendar", "v3",
+                        credentials=credentials, cache_discovery=False)
 
         existing = service.events().get(
             calendarId=integration.get("calendar_id"),
@@ -553,49 +587,6 @@ async def google_calendar_reschedule():
 
 
 # -------------------------
-# Collisions
-# -------------------------
-
-@google_calendar_bp.route('/collisions', methods=['GET'])
-@require_api_key
-async def get_collisions():
-    try:
-        user_id = request.args.get("user_id")
-        if not user_id:
-            return jsonify({"error": "user_id is required"}), 400
-
-        collisions = db.get_pending_collisions(request.ordo_app["id"], user_id)
-        return jsonify({"collisions": collisions, "count": len(collisions), "success": True})
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@google_calendar_bp.route('/collisions/resolve', methods=['POST'])
-@require_api_key
-async def resolve_collision():
-    try:
-        data = await request.get_json()
-        notification_id = data.get("notification_id")
-        resolution = data.get("resolution")  # keep_new | keep_old | manual
-
-        if not notification_id or not resolution:
-            return jsonify({"error": "notification_id and resolution are required"}), 400
-
-        if resolution not in ("keep_new", "keep_old", "manual"):
-            return jsonify({"error": "resolution must be keep_new, keep_old, or manual"}), 400
-
-        updated = db.resolve_collision(notification_id, resolution)
-        if not updated:
-            return jsonify({"error": "Notification not found"}), 404
-
-        return jsonify({"collision": updated, "success": True})
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-# -------------------------
 # Webhook
 # -------------------------
 
@@ -604,7 +595,9 @@ async def google_calendar_webhook():
     channel_id = request.headers.get("X-Goog-Channel-ID")
     resource_state = request.headers.get("X-Goog-Resource-State")
 
-    logger.info(f"=== ORDO WEBHOOK: channel_id={channel_id} state={resource_state} ===")  # add this
+    # add this
+    logger.info(
+        f"=== ORDO WEBHOOK: channel_id={channel_id} state={resource_state} ===")
 
     if resource_state == "sync":
         return "", 200
@@ -624,10 +617,12 @@ async def process_calendar_changes(app_id: str, user_id: str, email: str):
     try:
         credentials, integration = await get_refreshed_credentials(app_id, user_id, "google", email=email)
     except ValueError:
-        logger.warning(f"=== ORDO: No integration found for app={app_id} user={user_id} email={email} ===")
+        logger.warning(
+            f"=== ORDO: No integration found for app={app_id} user={user_id} email={email} ===")
         return
 
-    service = build("calendar", "v3", credentials=credentials, cache_discovery=False)
+    service = build("calendar", "v3", credentials=credentials,
+                    cache_discovery=False)
     channel_row = db.get_watch_channel(app_id, user_id, "google", email=email)
     sync_token = channel_row.get("sync_token") if channel_row else None
 
@@ -647,8 +642,10 @@ async def process_calendar_changes(app_id: str, user_id: str, email: str):
 
         new_sync_token = events_result.get("nextSyncToken")
         if new_sync_token:
-            db.update_watch_channel_sync_token(app_id, user_id, "google", email, new_sync_token)
+            db.update_watch_channel_sync_token(
+                app_id, user_id, "google", email, new_sync_token)
 
+        from agent.tools.calendar_tools import check_collision
         for event in events_result.get("items", []):
             if event.get("status") == "cancelled":
                 continue
@@ -656,68 +653,24 @@ async def process_calendar_changes(app_id: str, user_id: str, email: str):
 
     except Exception as e:
         if "410" in str(e):
-            logger.warning(f"=== ORDO: Sync token expired for app={app_id} user={user_id} email={email}, resetting ===")
-            db.update_watch_channel_sync_token(app_id, user_id, "google", email, None)
+            logger.warning(
+                f"=== ORDO: Sync token expired for app={app_id} user={user_id} email={email}, resetting ===")
+            db.update_watch_channel_sync_token(
+                app_id, user_id, "google", email, None)
         else:
             logger.error(f"=== ORDO: process_calendar_changes error: {e} ===")
 
-
-async def check_collision(app_id: str, user_id: str, email: str, new_event: dict, service):
-    start = new_event.get("start", {}).get("dateTime")
-    end = new_event.get("end", {}).get("dateTime")
-    event_id = new_event.get("id")
-
-    if not start or not end:
-        return  # all-day event, skip
-
-    existing = service.events().list(
-        calendarId="primary",
-        timeMin=start,
-        timeMax=end,
-        singleEvents=True,
-    ).execute().get("items", [])
-
-    collisions = [
-        e for e in existing
-        if e["id"] != event_id and e.get("status") != "cancelled"
-    ]
-
-    if not collisions:
-        return
-
-    logger.info(f"=== ORDO: Collision detected for user={user_id} event={new_event.get('summary')} ===")
-
-    db.create_collision_notification(
-        app_id=app_id,
-        user_id=user_id,
-        email=email,
-        new_event_id=event_id,
-        new_event_summary=new_event.get("summary", "Untitled"),
-        new_event_start=start,
-        new_event_end=end,
-        colliding_events=[
-            {
-                "id": e["id"],
-                "summary": e.get("summary", "Untitled"),
-                # handle all-day events that only have 'date', not 'dateTime'
-                "start": e.get("start", {}).get("dateTime") or e.get("start", {}).get("date"),
-                "end": e.get("end", {}).get("dateTime") or e.get("end", {}).get("date"),
-                "email": email,
-            }
-            for e in collisions
-            # skip colliding events that have no time at all
-            if e.get("start", {}).get("dateTime") or e.get("start", {}).get("date")
-        ],
-    )
 
 # -------------------------
 # Watch registration helpers
 # -------------------------
 
+
 def get_google_credentials(app_id: str, user_id: str, email: str = None) -> google.oauth2.credentials.Credentials:
     row = db.get_integration(app_id, user_id, provider="google", email=email)
     if not row:
-        raise Exception(f"No Google integration for user {user_id} email={email}")
+        raise Exception(
+            f"No Google integration for user {user_id} email={email}")
 
     creds = google.oauth2.credentials.Credentials(
         token=row["access_token"],
@@ -741,7 +694,8 @@ def get_google_credentials(app_id: str, user_id: str, email: str = None) -> goog
 def register_google_watch(app_id: str, user_id: str, email: str = None):
     integration = db.get_integration(app_id, user_id, "google", email=email)
     if not integration:
-        raise Exception(f"No Google integration for user {user_id} email={email}")
+        raise Exception(
+            f"No Google integration for user {user_id} email={email}")
 
     actual_email = integration["email"]  # use this everywhere below
     creds = get_google_credentials(app_id, user_id, email=actual_email)

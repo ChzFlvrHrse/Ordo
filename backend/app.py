@@ -60,6 +60,6 @@ async def shutdown():
 if __name__ == "__main__":
     from classes import OrdoDB
     db = OrdoDB()
-    db.reset()
-    db.seed()
+    # db.reset()
+    # db.seed()
     quart_app.run(host="0.0.0.0", port=5000)

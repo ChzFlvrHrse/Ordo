@@ -1,10 +1,10 @@
 import json
-import logging
 import pytz
+import logging
+from classes import OrdoDB
 from datetime import datetime, timedelta
 from googleapiclient.discovery import build
 from api.calendar import get_refreshed_credentials
-from classes import OrdoDB
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -93,35 +93,7 @@ TOOL_DEFINITIONS = [
             },
             "required": ["event_id", "start_time", "end_time"],
         },
-    },
-    {
-        "name": "google_get_collisions",
-        "description": "Check for any pending calendar collision notifications for the user. Call this after booking an event to see if any conflicts were detected.",
-        "input_schema": {
-            "type": "object",
-            "properties": {},
-            "required": [],
-        },
-    },
-    {
-        "name": "google_resolve_collision",
-        "description": "Resolve a calendar collision. Present the user with all three options before calling this.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "notification_id": {
-                    "type": "string",
-                    "description": "The collision notification ID to resolve.",
-                },
-                "resolution": {
-                    "type": "string",
-                    "enum": ["keep_new", "keep_old", "manual"],
-                    "description": "keep_new: delete the conflicting old event. keep_old: delete the newly created event. manual: acknowledge and handle manually.",
-                },
-            },
-            "required": ["notification_id", "resolution"],
-        },
-    },
+    }
 ]
 
 
@@ -300,35 +272,4 @@ async def reschedule_event(app_id: str, user_id: str, event_id: str,
 
     except Exception as e:
         logger.error(f"google.reschedule_event error: {e}")
-        return {"success": False, "error": str(e)}
-
-
-async def get_collisions(app_id: str, user_id: str) -> dict:
-    try:
-        collisions = db.get_pending_collisions(app_id, user_id)
-        return {"success": True, "collisions": collisions, "count": len(collisions)}
-    except Exception as e:
-        logger.error(f"google.get_collisions error: {e}")
-        return {"success": False, "error": str(e)}
-
-
-async def resolve_collision(app_id: str, user_id: str,
-                            notification_id: str, resolution: str) -> dict:
-    try:
-        updated = db.resolve_collision(notification_id, resolution)
-        if not updated:
-            return {"success": False, "error": "Notification not found"}
-
-        if resolution == "keep_new":
-            for colliding in updated.get("colliding_events", []):
-                await cancel_event(app_id, user_id, colliding["id"], email=colliding["email"])
-
-        elif resolution == "keep_old":
-            # need to know which account the new event is on
-            # store email on the notification itself too
-            await cancel_event(app_id, user_id, updated["new_event_id"], email=updated["email"])
-
-        return {"success": True, "collision": updated}
-    except Exception as e:
-        logger.error(f"google.resolve_collision error: {e}")
         return {"success": False, "error": str(e)}
