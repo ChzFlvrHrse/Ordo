@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Check, Palette, Save, X } from "lucide-react";
+import { GoogleLogo, OutlookLogo } from "../../logos";
 import "./CalendarLabelsModal.css";
 
 type CalendarIntegration = {
@@ -31,7 +32,14 @@ const COLOR_OPTIONS = {
 const COLORS = Object.values(COLOR_OPTIONS);
 
 function getProviderLabel(provider: string) {
+  if (provider === "microsoft") return "Outlook";
   return provider.charAt(0).toUpperCase() + provider.slice(1);
+}
+
+function ProviderLogo({ provider }: { provider: string }) {
+  if (provider === "google") return <GoogleLogo className="calendar-label-provider-logo" />;
+  if (provider === "microsoft") return <OutlookLogo className="calendar-label-provider-logo" />;
+  return null;
 }
 
 function getInitials(email: string) {
@@ -150,6 +158,7 @@ export default function CalendarLabelsModal({
                   <div className="calendar-label-account-copy">
                     <div className="calendar-label-email">{item.email}</div>
                     <div className="calendar-label-provider">
+                      <ProviderLogo provider={item.provider} />
                       {getProviderLabel(item.provider)}
                     </div>
                   </div>

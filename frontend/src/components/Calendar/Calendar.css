@@ -445,7 +445,9 @@
 
 .connections-menu-item {
   width: 100%;
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   text-align: left;
   background: transparent;
   border: none;
@@ -455,6 +457,12 @@
   border-radius: 12px;
   cursor: pointer;
   transition: background 0.18s ease;
+}
+
+.connections-menu-logo {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
 }
 
 .connections-menu-item:hover {
@@ -481,10 +489,24 @@
 }
 
 .provider-popover-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 13px;
   font-weight: 600;
   margin-bottom: 10px;
   color: rgba(255, 255, 255, 0.85);
+}
+
+.provider-popover-logo {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+}
+
+.provider-popover-logo svg {
+  width: 100%;
+  height: 100%;
 }
 
 .provider-popover-list {

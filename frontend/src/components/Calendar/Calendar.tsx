@@ -7,11 +7,12 @@ import { DatesSetArg, EventClickArg, EventContentArg } from "@fullcalendar/core"
 import { ChevronDown, Link2, Tag } from "lucide-react";
 import toast from "react-hot-toast";
 import { OrdoEvent } from "../../hooks/useEvents";
+import { GoogleLogo, OutlookLogo, OrdoLogo } from "../../logos";
 import config from "../../config";
 import "./Calendar.css";
 
 // Modals
-import GoogleCalendarModal from "../../modal/GoogleCalendarModal/GoogleCalendarModal";
+import CalendarAuthModal from "../../modal/CalendarAuthModal/CalendarAuthModal";
 import CalendarLabelsModal from "../../modal/CalendarLabelsModal/CalendarLabelsModal";
 import EventDetailsModal from "../../modal/EventDetailsModal/EventDetailsModal";
 
@@ -39,25 +40,6 @@ function renderEventContent(arg: EventContentArg) {
   );
 }
 
-function ordoLogo() {
-  return (
-    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-      <defs>
-        <linearGradient id="ordoGrad" x1="0" y1="0" x2="28" y2="28" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#7c3aed" />
-          <stop offset="1" stopColor="#06b6d4" />
-        </linearGradient>
-      </defs>
-      <rect x="2" y="5" width="24" height="21" rx="4" stroke="url(#ordoGrad)" strokeWidth="1.6" />
-      <rect x="8" y="2" width="2.2" height="6" rx="1.1" fill="url(#ordoGrad)" />
-      <rect x="18" y="2" width="2.2" height="6" rx="1.1" fill="url(#ordoGrad)" />
-      <rect x="6" y="12.5" width="4" height="4" rx="1.1" fill="url(#ordoGrad)" fillOpacity="0.3" />
-      <rect x="12" y="12.5" width="4" height="4" rx="1.1" fill="url(#ordoGrad)" />
-      <rect x="18" y="12.5" width="4" height="4" rx="1.1" fill="url(#ordoGrad)" fillOpacity="0.3" />
-      <rect x="6" y="18.5" width="4" height="4" rx="1.1" fill="url(#ordoGrad)" fillOpacity="0.3" />
-    </svg>
-  );
-}
 
 function LabelLegend({
   integrations,
@@ -128,8 +110,8 @@ export default function Calendar({
   const connectionsMenuRef = useRef<HTMLDivElement | null>(null);
 
   const [activeView, setActiveView] = useState("Month");
-  const [showAuthModal, setShowAuthModal] = useState<string | null>(null);
-  const [googleCalendarLoading, setGoogleCalendarLoading] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState<"google" | "microsoft" | "labels" | null>(null);
+  const [authLoading, setAuthLoading] = useState(false);
   const [showConnectionsMenu, setShowConnectionsMenu] = useState(false);
   const [providerConnections, setProviderConnections] = useState<Record<string, any[]>>({});
   const [activeProvider, setActiveProvider] = useState<string | null>(null);
@@ -168,7 +150,7 @@ export default function Calendar({
   };
 
   const googleConnected = (providerConnections.google || []).length > 0;
-  const outlookConnected = (providerConnections.outlook || []).length > 0;
+  const outlookConnected = (providerConnections.microsoft || []).length > 0;
 
   const filteredEvents = useMemo(() => {
     if (activeLabelFilters.length === 0) return events;
@@ -236,10 +218,20 @@ export default function Calendar({
     });
   };
 
-  const connectGoogleCalendar = async () => {
-    setGoogleCalendarLoading(true);
+  const PROVIDER_ENDPOINTS: Record<"google" | "microsoft", string> = {
+    google: "/google_calendar/connect",
+    microsoft: "/microsoft_calendar/connect",
+  };
+
+  const PROVIDER_DISPLAY: Record<"google" | "microsoft", string> = {
+    google: "Google",
+    microsoft: "Outlook",
+  };
+
+  const connectProvider = async (provider: "google" | "microsoft") => {
+    setAuthLoading(true);
     try {
-      const result = await fetch(`${config.apiBaseUrl}/google_calendar/connect`, {
+      const result = await fetch(`${config.apiBaseUrl}${PROVIDER_ENDPOINTS[provider]}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -249,15 +241,15 @@ export default function Calendar({
       });
       const data = await result.json();
       if (data.success && data?.auth_url) {
-        toast.loading("Redirecting to Google...");
+        toast.loading(`Redirecting to ${PROVIDER_DISPLAY[provider]}...`);
         window.location.href = data.auth_url;
       } else {
-        toast.error(data.error || "Failed to start Google auth");
-        setGoogleCalendarLoading(false);
+        toast.error(data.error || `Failed to start ${PROVIDER_DISPLAY[provider]} auth`);
+        setAuthLoading(false);
       }
     } catch (error) {
-      toast.error("Could not connect to Google Calendar");
-      setGoogleCalendarLoading(false);
+      toast.error(`Could not connect to ${PROVIDER_DISPLAY[provider]} Calendar`);
+      setAuthLoading(false);
     }
   };
 
@@ -303,25 +295,19 @@ export default function Calendar({
       return;
     }
 
-    switch (provider) {
-      case "google":
-        setShowAuthModal("google");
-        setActiveProvider(null);
-        break;
-      case "outlook":
-        setActiveProvider(null);
-        setShowConnectionsMenu(false);
-        break;
-      default:
-        break;
+    if (provider === "google" || provider === "microsoft") {
+      setShowAuthModal(provider);
+      setActiveProvider(null);
     }
 
     setShowConnectionsMenu(false);
   };
 
-  const connectionPills = ["ordo", "google", "outlook"];
-  const getProviderLabel = (provider: string) =>
-    provider.charAt(0).toUpperCase() + provider.slice(1);
+  const connectionPills = {
+    ordo: "Ordo",
+    google: "Google",
+    microsoft: "Outlook",
+  };
   const getInitials = (email: string) => email?.charAt(0)?.toUpperCase() || "?";
 
   const handleDatesSet = async (info: DatesSetArg) => {
@@ -337,12 +323,13 @@ export default function Calendar({
 
   return (
     <>
-      {showAuthModal === "google" && (
-        <GoogleCalendarModal
-          loading={googleCalendarLoading}
+      {(showAuthModal === "google" || showAuthModal === "microsoft") && (
+        <CalendarAuthModal
+          loading={authLoading}
           onClose={() => setShowAuthModal(null)}
-          onConnect={connectGoogleCalendar}
-          connected={googleConnected}
+          onConnect={() => connectProvider(showAuthModal)}
+          provider={showAuthModal}
+          connected={showAuthModal === "google" ? googleConnected : outlookConnected}
         />
       )}
 
@@ -368,7 +355,7 @@ export default function Calendar({
         <div className="calendar-topbar">
           <div className="calendar-logo">
             <div className="calendar-logo-icon">
-              {ordoLogo()}
+              <OrdoLogo />
               <div className="calendar-logo-sparkle">
                 <svg
                   width="12"
@@ -438,33 +425,44 @@ export default function Calendar({
             <div className="connections-legend-wrap">
               <div className="label-legend-header">Connections</div>
               <div className="connections-legend-pills">
-                {connectionPills.map((provider) => {
+                {Object.keys(connectionPills).map((provider: string) => {
                   const connections =
                     provider === "ordo"
                       ? [{ id: "ordo-system", email: "system@ordo" }]
                       : providerConnections[provider] || [];
                   const connected = connections.length > 0;
+                  const label = connectionPills[provider as keyof typeof connectionPills];
 
                   return (
                     <div key={provider} className="source-pill-wrapper">
                       <button
                         type="button"
-                        className={`source-pill ${provider} ${connected ? "connected" : "inactive"}`}
+                        className={`source-pill ${label.toLowerCase()} ${connected ? "connected" : "inactive"}`}
                         onClick={() =>
                           connected && setActiveProvider(activeProvider === provider ? null : provider)
                         }
                       >
-                        <span className={`source-dot ${provider}`} />
+                        <span className={`source-dot ${label.toLowerCase()}`} />
                         {connected && connections.length > 0 && provider !== "ordo" && (
                           <span className="source-count">{connections.length}</span>
                         )}
-                        {getProviderLabel(provider)}
+                        {label}
                       </button>
 
                       {activeProvider === provider && (
                         <div ref={popoverRef} className="provider-popover">
                           <div className="provider-popover-header">
-                            {getProviderLabel(provider)} accounts
+                            {provider === "microsoft" && (
+                              <span className="provider-popover-logo">
+                                <OutlookLogo className="" />
+                              </span>
+                            )}
+                            {provider === "google" && (
+                              <span className="provider-popover-logo">
+                                <GoogleLogo className="" />
+                              </span>
+                            )}
+                            {label} accounts
                           </div>
                           <div className="provider-popover-list">
                             {provider === "ordo" ? (
@@ -557,13 +555,15 @@ export default function Calendar({
                     className="connections-menu-item"
                     onClick={() => openModalProvider("google", "oauth")}
                   >
+                    <GoogleLogo className="connections-menu-logo" />
                     Connect Google
                   </button>
                   <button
                     type="button"
                     className="connections-menu-item"
-                    onClick={() => openModalProvider("outlook", "oauth")}
+                    onClick={() => openModalProvider("microsoft", "oauth")}
                   >
+                    <OutlookLogo className="connections-menu-logo" />
                     Connect Outlook
                   </button>
                   {googleConnected && outlookConnected && (
