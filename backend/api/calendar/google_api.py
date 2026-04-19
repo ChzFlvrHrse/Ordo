@@ -69,7 +69,7 @@ def _credentials(integration: dict) -> google.oauth2.credentials.Credentials:
     )
 
 
-async def get_refreshed_credentials(app_id: str, user_id: str,
+async def get_refreshed_credentials_google(app_id: str, user_id: str,
                                     provider: str = "google", email: str = None):
     integration = db.get_integration(app_id, user_id, provider, email=email)
     if not integration:
@@ -304,7 +304,7 @@ async def google_calendar_events():
 
         for integration in integrations:
             try:
-                credentials, integration = await get_refreshed_credentials(
+                credentials, integration = await get_refreshed_credentials_google(
                     request.ordo_app["id"], user_id, "google", email=integration["email"]
                 )
 
@@ -473,7 +473,7 @@ async def google_calendar_book():
         if missing:
             return jsonify({"error": f"Missing required fields: {', '.join(missing)}", "success": False}), 400
 
-        credentials, integration = await get_refreshed_credentials(
+        credentials, integration = await get_refreshed_credentials_google(
             request.ordo_app["id"], user_id, "google", email=email
         )
 
@@ -524,7 +524,7 @@ async def google_calendar_cancel():
         if not user_id or not event_id:
             return jsonify({"error": "user_id and event_id are required"}), 400
 
-        credentials, integration = await get_refreshed_credentials(
+        credentials, integration = await get_refreshed_credentials_google(
             request.ordo_app["id"], user_id, "google", email=email
         )
 
@@ -557,7 +557,7 @@ async def google_calendar_reschedule():
         if not all([user_id, event_id, start_time, end_time]):
             return jsonify({"error": "user_id, event_id, start_time, end_time are required"}), 400
 
-        credentials, integration = await get_refreshed_credentials(
+        credentials, integration = await get_refreshed_credentials_google(
             request.ordo_app["id"], user_id, "google", email=email
         )
 
@@ -615,7 +615,7 @@ async def google_calendar_webhook():
 
 async def process_calendar_changes(app_id: str, user_id: str, email: str):
     try:
-        credentials, integration = await get_refreshed_credentials(app_id, user_id, "google", email=email)
+        credentials, integration = await get_refreshed_credentials_google(app_id, user_id, "google", email=email)
     except ValueError:
         logger.warning(
             f"=== ORDO: No integration found for app={app_id} user={user_id} email={email} ===")

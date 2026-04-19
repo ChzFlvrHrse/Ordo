@@ -584,6 +584,6 @@ class OrdoDB:
             name="Ordo Dev",
             api_key="ordo_sk_7f3a91c2e84b56d0f2a7139e4c8b05d1",
             redirect_uri="http://localhost:3000/callback",
-            allowed_providers=["google", "outlook"],
+            allowed_providers=["google", "microsoft"],
         )
         return app

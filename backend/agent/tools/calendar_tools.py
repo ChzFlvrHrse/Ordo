@@ -3,8 +3,11 @@ import logging
 from classes import OrdoDB
 from datetime import datetime, timedelta
 from googleapiclient.discovery import build
-from agent.tools.google_tool import cancel_event
-from api.calendar import get_refreshed_credentials
+from agent.tools.google_tools import cancel_event
+from api.calendar import (
+    get_refreshed_credentials_google,
+    get_refreshed_token_microsoft
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -104,7 +107,7 @@ def _parse_bound(value: str, tz) -> datetime:
 async def _fetch_google_events(app_id: str, user_id: str, email: str,
                                window_start: datetime, window_end: datetime) -> list:
     try:
-        credentials, integration = await get_refreshed_credentials(
+        credentials, integration = await get_refreshed_credentials_google(
             app_id, user_id, "google", email=email
         )
         service = build("calendar", "v3",
@@ -140,7 +143,7 @@ async def fetch_events_in_window(app_id: str, user_id: str,
     provider = integration["provider"]
 
     if provider == "google":
-        creds, integ = await get_refreshed_credentials(
+        creds, integ = await get_refreshed_credentials_google(
             app_id, user_id, "google", email=integration["email"]
         )
         svc = build("calendar", "v3", credentials=creds, cache_discovery=False)
