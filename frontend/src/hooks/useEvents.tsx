@@ -7,7 +7,7 @@ export interface OrdoEvent {
   title: string;
   start: string;
   end: string;
-  provider: "google" | "outlook" | "ordo";
+  provider: "google" | "microsoft" | "ordo";
   email?: string;
   label?: string;
   color?: string;
@@ -20,7 +20,9 @@ export interface OrdoEvent {
 
 function normalizeGoogleEvent(event: any, integrations: any[]): OrdoEvent {
   const account = event._ordo_account;
-  const integration = integrations.find((i) => i.email === account);
+  const integration = integrations.find(
+    (i) => i.provider === "google" && i.email === account
+  );
 
   const meetLink =
     event.conferenceData?.entryPoints?.find((e: any) => e.entryPointType === "video")?.uri ||
@@ -40,6 +42,29 @@ function normalizeGoogleEvent(event: any, integrations: any[]): OrdoEvent {
     attendees: event.attendees?.map((a: any) => a.email),
     meetLink,
     htmlLink: event.htmlLink,
+  };
+}
+
+function normalizeMicrosoftEvent(event: any, integrations: any[]): OrdoEvent {
+  const account = event._ordo_account;
+  const integration = integrations.find(
+    (i) => i.provider === "microsoft" && i.email === account
+  );
+
+  return {
+    id: event.id,
+    title: event.subject || "(No title)",
+    start: event.start?.dateTime,
+    end: event.end?.dateTime,
+    provider: "microsoft",
+    email: account,
+    label: integration?.label,
+    color: integration?.color || "#2563eb",
+    location: event.location?.displayName,
+    description: event.bodyPreview,
+    attendees: event.attendees?.map((a: any) => a.emailAddress?.address).filter(Boolean),
+    meetLink: event.onlineMeeting?.joinUrl || null,
+    htmlLink: event.webLink,
   };
 }
 
@@ -101,16 +126,43 @@ export function useEvents({
   const [integrations, setIntegrations] = useState<any[]>([]);
 
   const loadStatus = useCallback(async () => {
-    const res = await fetch(
-      `${config.apiBaseUrl}/google_calendar/status?user_id=${config.userId}`,
-      {
-        headers: { "X-API-Key": config.apiKey },
-      }
-    );
+    const headers = { "X-API-Key": config.apiKey };
+    const [googleRes, microsoftRes] = await Promise.all([
+      fetch(`${config.apiBaseUrl}/google_calendar/status?user_id=${config.userId}`, { headers }),
+      fetch(`${config.apiBaseUrl}/microsoft_calendar/status?user_id=${config.userId}`, { headers }),
+    ]);
 
-    const data = await res.json();
-    return data.integrations || [];
+    const [googleData, microsoftData] = await Promise.all([
+      googleRes.ok ? googleRes.json() : Promise.resolve({ integrations: [] }),
+      microsoftRes.ok ? microsoftRes.json() : Promise.resolve({ integrations: [] }),
+    ]);
+
+    const google = (googleData.integrations || []).map((i: any) => ({ ...i, provider: "google" }));
+    const microsoft = (microsoftData.integrations || []).map((i: any) => ({ ...i, provider: "microsoft" }));
+    return [...google, ...microsoft];
   }, []);
+
+  const fetchProviderEvents = useCallback(
+    async (provider: "google" | "microsoft", start: Date, end: Date) => {
+      const base = provider === "google" ? "google_calendar" : "microsoft_calendar";
+      const res = await fetch(
+        `${config.apiBaseUrl}/${base}/events?user_id=${config.userId}&start=${encodeURIComponent(
+          start.toISOString()
+        )}&end=${encodeURIComponent(end.toISOString())}`,
+        { headers: { "X-API-Key": config.apiKey } }
+      );
+
+      // 404 = no integration of this provider — that's fine, not an error.
+      if (res.status === 404) return [];
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || `Failed to fetch ${provider} events`);
+      }
+      return data.events || [];
+    },
+    []
+  );
 
   const fetchMonth = useCallback(
     async (monthKey: string) => {
@@ -120,33 +172,16 @@ export function useEvents({
       try {
         const { start, end } = getMonthBounds(monthKey);
 
-        const [statusData, eventsRes] = await Promise.all([
+        const [statusData, googleEvents, microsoftEvents] = await Promise.all([
           loadStatus(),
-          fetch(
-            `${config.apiBaseUrl}/google_calendar/events?user_id=${config.userId}&start=${encodeURIComponent(
-              start.toISOString()
-            )}&end=${encodeURIComponent(end.toISOString())}`,
-            {
-              headers: { "X-API-Key": config.apiKey },
-            }
-          ),
+          fetchProviderEvents("google", start, end),
+          fetchProviderEvents("microsoft", start, end),
         ]);
 
-        if (eventsRes.status === 404) {
-          setMonthCache((prev) => ({ ...prev, [monthKey]: [] }));
-          setIntegrations(statusData);
-          return;
-        }
-
-        const eventsData = await eventsRes.json();
-
-        if (!eventsRes.ok || !eventsData.success) {
-          throw new Error(eventsData.error || "Failed to fetch events");
-        }
-
-        const normalized = (eventsData.events || []).map((e: any) =>
-          normalizeGoogleEvent(e, statusData)
-        );
+        const normalized: OrdoEvent[] = [
+          ...googleEvents.map((e: any) => normalizeGoogleEvent(e, statusData)),
+          ...microsoftEvents.map((e: any) => normalizeMicrosoftEvent(e, statusData)),
+        ];
 
         setIntegrations(statusData);
         setMonthCache((prev) => ({
@@ -160,7 +195,7 @@ export function useEvents({
         setLoadingMonths((prev) => prev.filter((m) => m !== monthKey));
       }
     },
-    [loadStatus]
+    [loadStatus, fetchProviderEvents]
   );
 
   const ensureMonthsLoaded = useCallback(

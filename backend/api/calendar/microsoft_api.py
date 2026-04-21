@@ -36,9 +36,11 @@ def _build_msal_app():
 async def get_refreshed_token_microsoft(app_id: str, user_id: str, email: str = None) -> tuple[str, dict]:
     integration = db.get_integration(app_id, user_id, "microsoft", email=email)
     if not integration:
-        raise ValueError(f"No Microsoft Calendar integration found for user {user_id}")
+        raise ValueError(
+            f"No Microsoft Calendar integration found for user {user_id}")
 
-    expiry = datetime.fromisoformat(integration["token_expiry"]) if integration.get("token_expiry") else None
+    expiry = datetime.fromisoformat(
+        integration["token_expiry"]) if integration.get("token_expiry") else None
     skew = timedelta(minutes=5)
     needs_refresh = (
         not integration.get("access_token")
@@ -53,20 +55,24 @@ async def get_refreshed_token_microsoft(app_id: str, user_id: str, email: str = 
             scopes=SCOPES,
         )
         if "error" in result:
-            raise Exception(f"Token refresh failed: {result['error']} - {result.get('error_description')}")
+            raise Exception(
+                f"Token refresh failed: {result['error']} - {result.get('error_description')}")
 
-        new_expiry = (datetime.utcnow() + timedelta(seconds=result["expires_in"])).isoformat()
+        new_expiry = (datetime.utcnow() +
+                      timedelta(seconds=result["expires_in"])).isoformat()
         db.upsert_integration(
             app_id=app_id,
             user_id=user_id,
             provider="microsoft",
             email=integration["email"],
             access_token=result["access_token"],
-            refresh_token=result.get("refresh_token", integration["refresh_token"]),
+            refresh_token=result.get(
+                "refresh_token", integration["refresh_token"]),
             token_expiry=new_expiry,
         )
         integration["access_token"] = result["access_token"]
-        logger.info(f"=== ORDO: Refreshed Microsoft token app={app_id} user={user_id} email={integration['email']} ===")
+        logger.info(
+            f"=== ORDO: Refreshed Microsoft token app={app_id} user={user_id} email={integration['email']} ===")
 
     return integration["access_token"], integration
 
@@ -152,7 +158,8 @@ async def microsoft_calendar_exchange():
 
         claims = result.get("id_token_claims", {})
         email = claims.get("preferred_username") or claims.get("email")
-        token_expiry = (datetime.utcnow() + timedelta(seconds=result.get("expires_in", 3600))).isoformat()
+        token_expiry = (datetime.utcnow(
+        ) + timedelta(seconds=result.get("expires_in", 3600))).isoformat()
 
         # Fetch primary calendar ID from Graph
         async with AsyncClient() as client:
@@ -175,7 +182,15 @@ async def microsoft_calendar_exchange():
             redirect_uri=post_exchange_uri,
         )
 
-        logger.info(f"=== ORDO: Connected Microsoft Calendar app={app_id} user={user_id} email={email} ===")
+        try:
+            await register_microsoft_watch(app_id, user_id, email=email)
+            logger.info(
+                f"=== ORDO: Registered Microsoft watch app={app_id} user={user_id} ===")
+        except Exception as e:
+            logger.warning(f"=== ORDO: Failed to register Microsoft watch: {e} ===")
+
+        logger.info(
+            f"=== ORDO: Connected Microsoft Calendar app={app_id} user={user_id} email={email} ===")
         return redirect(post_exchange_uri)
 
     except Exception as e:
@@ -260,7 +275,8 @@ async def microsoft_calendar_events():
         )
 
         if email:
-            integrations = [db.get_integration(request.ordo_app["id"], user_id, "microsoft", email=email)]
+            integrations = [db.get_integration(
+                request.ordo_app["id"], user_id, "microsoft", email=email)]
             integrations = [i for i in integrations if i]
         else:
             integrations = db.get_integrations_by_provider(
@@ -282,17 +298,23 @@ async def microsoft_calendar_events():
 
                 if start_param and end_param:
                     try:
-                        parsed_start = datetime.fromisoformat(start_param.replace("Z", "+00:00"))
-                        parsed_end = datetime.fromisoformat(end_param.replace("Z", "+00:00"))
+                        parsed_start = datetime.fromisoformat(
+                            start_param.replace("Z", "+00:00"))
+                        parsed_end = datetime.fromisoformat(
+                            end_param.replace("Z", "+00:00"))
                     except ValueError:
                         try:
-                            parsed_start = datetime.strptime(start_param, "%Y-%m-%d")
-                            parsed_end = datetime.strptime(end_param, "%Y-%m-%d")
+                            parsed_start = datetime.strptime(
+                                start_param, "%Y-%m-%d")
+                            parsed_end = datetime.strptime(
+                                end_param, "%Y-%m-%d")
                         except ValueError:
                             return jsonify({"error": "start and end must be valid ISO datetimes or YYYY-MM-DD"}), 400
 
-                    start = tz.localize(parsed_start) if parsed_start.tzinfo is None else parsed_start.astimezone(tz)
-                    end = tz.localize(parsed_end) if parsed_end.tzinfo is None else parsed_end.astimezone(tz)
+                    start = tz.localize(
+                        parsed_start) if parsed_start.tzinfo is None else parsed_start.astimezone(tz)
+                    end = tz.localize(
+                        parsed_end) if parsed_end.tzinfo is None else parsed_end.astimezone(tz)
 
                     if end <= start:
                         return jsonify({"error": "end must be after start"}), 400
@@ -302,7 +324,9 @@ async def microsoft_calendar_events():
 
                 else:
                     start = datetime.now(tz)
-                    end = start + timedelta(weeks=integration.get("lookahead_weeks") or 4)
+                    end = start + \
+                        timedelta(weeks=integration.get(
+                            "lookahead_weeks") or 4)
 
                 params = {
                     "startDateTime": start.isoformat(),
@@ -336,7 +360,8 @@ async def microsoft_calendar_events():
                         dt_str = (event.get("start") or {}).get("dateTime")
                         if not dt_str:
                             continue
-                        dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00")).astimezone(tz)
+                        dt = datetime.fromisoformat(
+                            dt_str.replace("Z", "+00:00")).astimezone(tz)
 
                         if available_days and dt.isoweekday() not in available_days:
                             continue
@@ -350,10 +375,12 @@ async def microsoft_calendar_events():
                 all_events.extend(items)
 
             except Exception as e:
-                logger.error(f"=== ORDO: Error fetching Microsoft events for {integration.get('email')}: {e} ===")
+                logger.error(
+                    f"=== ORDO: Error fetching Microsoft events for {integration.get('email')}: {e} ===")
                 continue
 
-        all_events.sort(key=lambda e: (e.get("start") or {}).get("dateTime") or "")
+        all_events.sort(key=lambda e: (
+            e.get("start") or {}).get("dateTime") or "")
 
         return jsonify({
             "events": all_events,
@@ -386,7 +413,8 @@ async def microsoft_calendar_book():
         description = args.get("description")
         add_teams = args.get("add_teams", False)
 
-        logger.info(f"=== MICROSOFT CALENDAR BOOK: app={request.ordo_app['name']} user_id={user_id} email={email} title={title} ===")
+        logger.info(
+            f"=== MICROSOFT CALENDAR BOOK: app={request.ordo_app['name']} user_id={user_id} email={email} title={title} ===")
 
         missing = [k for k, v in {"user_id": user_id, "title": title, "start_time": start_time,
                                   "end_time": end_time, "attendee_emails": attendee_emails}.items() if not v]
@@ -414,7 +442,8 @@ async def microsoft_calendar_book():
         async with AsyncClient() as client:
             resp = await client.post(
                 "https://graph.microsoft.com/v1.0/me/events",
-                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                headers={"Authorization": f"Bearer {token}",
+                         "Content-Type": "application/json"},
                 json=event_body,
             )
             event = resp.json()
@@ -476,7 +505,8 @@ async def microsoft_calendar_reschedule():
         async with AsyncClient() as client:
             resp = await client.patch(
                 f"https://graph.microsoft.com/v1.0/me/events/{event_id}",
-                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                headers={"Authorization": f"Bearer {token}",
+                         "Content-Type": "application/json"},
                 json={
                     "start": {"dateTime": start_time, "timeZone": tz_name},
                     "end": {"dateTime": end_time, "timeZone": tz_name},
@@ -527,10 +557,12 @@ async def process_microsoft_changes(app_id: str, user_id: str, email: str):
     try:
         token, integration = await get_refreshed_token_microsoft(app_id, user_id, email=email)
     except ValueError:
-        logger.warning(f"=== ORDO: No Microsoft integration for app={app_id} user={user_id} email={email} ===")
+        logger.warning(
+            f"=== ORDO: No Microsoft integration for app={app_id} user={user_id} email={email} ===")
         return
 
-    channel_row = db.get_watch_channel(app_id, user_id, "microsoft", email=email)
+    channel_row = db.get_watch_channel(
+        app_id, user_id, "microsoft", email=email)
     delta_link = channel_row.get("sync_token") if channel_row else None
 
     try:
@@ -546,7 +578,8 @@ async def process_microsoft_changes(app_id: str, user_id: str, email: str):
 
         new_delta_link = data.get("@odata.deltaLink")
         if new_delta_link:
-            db.update_watch_channel_sync_token(app_id, user_id, "microsoft", email, new_delta_link)
+            db.update_watch_channel_sync_token(
+                app_id, user_id, "microsoft", email, new_delta_link)
 
         from agent.tools.calendar_tools import check_collision
         for event in data.get("value", []):
@@ -562,48 +595,45 @@ async def process_microsoft_changes(app_id: str, user_id: str, email: str):
 # Subscription registration
 # -------------------------
 
-def register_microsoft_watch(app_id: str, user_id: str, email: str = None):
-    import asyncio
-
+async def register_microsoft_watch(app_id: str, user_id: str, email: str = None):
     integration = db.get_integration(app_id, user_id, "microsoft", email=email)
     if not integration:
-        raise Exception(f"No Microsoft integration for user {user_id} email={email}")
+        raise Exception(
+            f"No Microsoft integration for user {user_id} email={email}")
 
     actual_email = integration["email"]
+    token, _ = await get_refreshed_token_microsoft(app_id, user_id, email=actual_email)
+    expiration = (datetime.utcnow() + timedelta(minutes=4230)
+                  ).strftime("%Y-%m-%dT%H:%M:%S.0000000Z")
 
-    async def _register():
-        token, _ = await get_refreshed_token_microsoft(app_id, user_id, email=actual_email)
-        expiration = (datetime.utcnow() + timedelta(hours=4230)).strftime("%Y-%m-%dT%H:%M:%S.0000000Z")
+    body = {
+        "changeType": "created,updated,deleted",
+        "notificationUrl": f"{os.environ['ORDO_BASE_URL']}/microsoft_calendar/webhook",
+        "resource": "me/events",
+        "expirationDateTime": expiration,
+        "clientState": f"{app_id}:{user_id}",
+    }
 
-        body = {
-            "changeType": "created,updated,deleted",
-            "notificationUrl": f"{os.environ['ORDO_BASE_URL']}/microsoft_calendar/webhook",
-            "resource": "me/events",
-            "expirationDateTime": expiration,
-            "clientState": f"{app_id}:{user_id}",
-        }
-
-        async with AsyncClient() as client:
-            resp = await client.post(
-                "https://graph.microsoft.com/v1.0/subscriptions",
-                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-                json=body,
-            )
-            result = resp.json()
-
-        subscription_id = result.get("id")
-        if not subscription_id:
-            raise Exception(f"Microsoft subscription failed: {result}")
-
-        db.upsert_watch_channel(
-            app_id=app_id,
-            user_id=user_id,
-            provider="microsoft",
-            email=actual_email,
-            channel_id=subscription_id,
-            resource_id=subscription_id,
-            expiration=expiration,
-            sync_token=None,
+    async with AsyncClient() as client:
+        resp = await client.post(
+            "https://graph.microsoft.com/v1.0/subscriptions",
+            headers={"Authorization": f"Bearer {token}",
+                     "Content-Type": "application/json"},
+            json=body,
         )
+        result = resp.json()
 
-    asyncio.run(_register())
+    subscription_id = result.get("id")
+    if not subscription_id:
+        raise Exception(f"Microsoft subscription failed: {result}")
+
+    db.upsert_watch_channel(
+        app_id=app_id,
+        user_id=user_id,
+        provider="microsoft",
+        email=actual_email,
+        channel_id=subscription_id,
+        resource_id=subscription_id,
+        expiration=expiration,
+        sync_token=None,
+    )

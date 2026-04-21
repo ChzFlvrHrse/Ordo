@@ -28,7 +28,6 @@ export default function Layout() {
 
   const {
     events,
-    integrations,
     loading: eventsLoading,
     refetch,
     ensureMonthsLoaded,
@@ -73,12 +72,6 @@ export default function Layout() {
   useEffect(() => {
     fetchActiveCalendars();
   }, [fetchActiveCalendars]);
-
-  useEffect(() => {
-    if (integrations.length > 0) {
-      setActiveCalendars(integrations);
-    }
-  }, [integrations]);
 
   const handleCalendarRefetch = useCallback(async () => {
     await Promise.all([fetchActiveCalendars(), refetch()]);

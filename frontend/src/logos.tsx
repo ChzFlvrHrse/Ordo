@@ -1,4 +1,4 @@
-function OrdoLogo() {
+export function OrdoLogo() {
     return (
         <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
             <defs>
@@ -18,7 +18,7 @@ function OrdoLogo() {
     );
 }
 
-function GoogleLogo({ className = "h-10 w-10" }: { className?: string }) {
+export function GoogleLogo({ className = "h-10 w-10" }: { className?: string }) {
     return (
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" className={className}>
             <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
@@ -30,70 +30,25 @@ function GoogleLogo({ className = "h-10 w-10" }: { className?: string }) {
     );
 }
 
-function OutlookLogo({ className = "h-10 w-10" }: { className?: string }) {
+export function OutlookLogo({ className = "h-10 w-10" }: { className?: string }) {
     return (
-        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28" fill="none" className={className}>
-            <defs>
-                <linearGradient id="outlookGrad" x1="0" y1="0" x2="28" y2="28" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="#2563eb" />
-                    <stop offset="1" stopColor="#06b6d4" />
-                </linearGradient>
-            </defs>
+        <svg viewBox="0 0 48 48" fill="none" className={className}>
+            {/* Back tile */}
+            <rect x="18" y="6" width="24" height="36" rx="4" fill="#0078D4" />
 
-            {/* Back panel (like Outlook app tile) */}
-            <rect
-                x="4"
-                y="4"
-                width="18"
-                height="20"
-                rx="4"
-                stroke="url(#outlookGrad)"
-                strokeWidth="1.6"
-            />
-
-            {/* Envelope body */}
-            <rect
-                x="6"
-                y="8"
-                width="14"
-                height="10"
-                rx="2"
-                stroke="url(#outlookGrad)"
-                strokeWidth="1.4"
-            />
-
-            {/* Envelope flap */}
+            {/* Envelope */}
+            <rect x="6" y="12" width="28" height="24" rx="3" fill="#1A5FB4" />
             <path
-                d="M6 8 L13 13 L20 8"
-                stroke="url(#outlookGrad)"
-                strokeWidth="1.4"
+                d="M6 14 L20 24 L34 14"
+                stroke="white"
+                strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
             />
 
-            {/* Side panel (Outlook "O" block feel) */}
-            <rect
-                x="2"
-                y="9"
-                width="6"
-                height="10"
-                rx="2"
-                fill="url(#outlookGrad)"
-                fillOpacity="0.15"
-                stroke="url(#outlookGrad)"
-                strokeWidth="1.2"
-            />
-
-            {/* O hint */}
-            <circle
-                cx="5"
-                cy="14"
-                r="1.8"
-                stroke="url(#outlookGrad)"
-                strokeWidth="1.2"
-            />
+            {/* O panel */}
+            <rect x="2" y="14" width="16" height="20" rx="3" fill="#005A9E" />
+            <circle cx="10" cy="24" r="5" stroke="white" strokeWidth="2" />
         </svg>
     );
 }
-
-export { GoogleLogo, OutlookLogo, OrdoLogo };

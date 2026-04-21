@@ -2,7 +2,8 @@ import json, logging
 from dotenv import load_dotenv
 from . import (
     calendar_tools,
-    google_tools
+    google_tools,
+    microsoft_tools
 )
 
 load_dotenv()
@@ -13,18 +14,27 @@ logger = logging.getLogger(__name__)
 TOOLS = [
     *calendar_tools.TOOL_DEFINITIONS,
     *google_tools.TOOL_DEFINITIONS,
-    # *outlook.TOOL_DEFINITIONS,
+    *microsoft_tools.TOOL_DEFINITIONS,
 ]
 
 TOOL_MAP = {
-    "google_get_events": google_tools.get_events,
-    "google_book_event": google_tools.book_event,
-    "google_cancel_event": google_tools.cancel_event,
-    "google_reschedule_event": google_tools.reschedule_event,
+    # Calendar tools
     "calendar_get_events": calendar_tools.get_events,
     "calendar_get_collisions": calendar_tools.get_collisions,
     "calendar_resolve_collision": calendar_tools.resolve_collision,
     "calendar_resolve_all_collisions": calendar_tools.resolve_all_collisions,
+
+    # Google tools
+    "google_get_events": google_tools.get_events,
+    "google_book_event": google_tools.book_event,
+    "google_cancel_event": google_tools.cancel_event,
+    "google_reschedule_event": google_tools.reschedule_event,
+
+    # Microsoft tools
+    "microsoft_get_events": microsoft_tools.get_events,
+    "microsoft_book_event": microsoft_tools.book_event,
+    "microsoft_cancel_event": microsoft_tools.cancel_event,
+    "microsoft_reschedule_event": microsoft_tools.reschedule_event,
 }
 
 
