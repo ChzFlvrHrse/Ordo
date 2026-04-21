@@ -1,4 +1,4 @@
-import os, logging
+import logging
 from quart import Blueprint, request, jsonify
 from functools import wraps
 from classes import OrdoDB

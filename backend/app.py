@@ -8,6 +8,7 @@ from api.scheduler import scheduler
 # Blueprint imports
 from api import (
     agent_bp,
+    action_bp,
     integrations_bp,
     google_calendar_bp,
     microsoft_calendar_bp,
@@ -37,6 +38,7 @@ quart_app = cors(
 
 # Blueprints registration
 quart_app.register_blueprint(agent_bp)
+quart_app.register_blueprint(action_bp)
 quart_app.register_blueprint(integrations_bp)
 quart_app.register_blueprint(google_calendar_bp)
 quart_app.register_blueprint(microsoft_calendar_bp)

@@ -1,4 +1,3 @@
-import os
 import logging
 from functools import wraps
 from classes import OrdoDB
