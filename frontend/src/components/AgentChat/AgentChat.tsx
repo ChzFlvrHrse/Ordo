@@ -23,8 +23,33 @@ const QUICK_PROMPTS = [
 
 export default function AgentChat({ messages, loading, error, onSend }: AgentChatProps) {
     const [open, setOpen] = useState(false);
+    const [closing, setClosing] = useState(false);
     const [input, setInput] = useState("");
     const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+    const panelRef = useRef<HTMLDivElement | null>(null);
+
+    const beginClose = () => {
+        if (closing) return;
+        setClosing(true);
+    };
+
+    useEffect(() => {
+        if (!open || closing) return;
+        const handleClickOutside = (e: MouseEvent) => {
+            if (!panelRef.current) return;
+            if (panelRef.current.contains(e.target as Node)) return;
+            beginClose();
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, [open, closing]);
+
+    const handlePanelAnimationEnd = (e: React.AnimationEvent<HTMLDivElement>) => {
+        if (e.animationName === "ordo-widget-scale-out") {
+            setOpen(false);
+            setClosing(false);
+        }
+    };
     const bottomRef = useRef<HTMLDivElement>(null);
 
     const { speak, stop: stopSpeaking, speakingId } = useTTS();
@@ -122,7 +147,13 @@ export default function AgentChat({ messages, loading, error, onSend }: AgentCha
                     </div>
                 </button>
             ) : (
-                <div className="ordo-widget-panel" role="dialog" aria-label="Ordo assistant">
+                <div
+                    ref={panelRef}
+                    className={`ordo-widget-panel${closing ? " is-closing" : ""}`}
+                    role="dialog"
+                    aria-label="Ordo assistant"
+                    onAnimationEnd={handlePanelAnimationEnd}
+                >
                     <div className="ordo-widget-header">
                         <div className="ordo-widget-brand">
                             <div className="ordo-widget-avatar ordo-widget-avatar--sm" aria-hidden="true">
@@ -133,7 +164,7 @@ export default function AgentChat({ messages, loading, error, onSend }: AgentCha
                         <button
                             type="button"
                             className="ordo-widget-close"
-                            onClick={() => setOpen(false)}
+                            onClick={beginClose}
                             aria-label="Close Ordo"
                         >
                             <X size={16} />
