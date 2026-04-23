@@ -3,18 +3,21 @@ import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
-import { DatesSetArg, EventClickArg, EventContentArg } from "@fullcalendar/core";
+import { DatesSetArg, EventClickArg, EventContentArg, MoreLinkArg } from "@fullcalendar/core";
 import { ChevronDown, Link2, Tag } from "lucide-react";
 import toast from "react-hot-toast";
 import { OrdoEvent } from "../../hooks/useEvents";
-import { ThirdPartyLogo, OrdoLogo } from "../../logos";
+import { ThirdPartyLogo } from "../../logos";
 import config from "../../config";
 import "./Calendar.css";
 
-// Modals
 import CalendarAuthModal from "../../modal/CalendarAuthModal/CalendarAuthModal";
 import CalendarLabelsModal from "../../modal/CalendarLabelsModal/CalendarLabelsModal";
 import EventDetailsModal from "../../modal/EventDetailsModal/EventDetailsModal";
+import ExpandedDayOverlay, {
+  ExpandedDayEvent,
+  ExpandedDayState,
+} from "../ExpandedDayOverlay/ExpandedDayOverlay";
 
 interface CalendarProps {
   events: OrdoEvent[];
@@ -28,18 +31,18 @@ interface CalendarProps {
 }
 
 function renderEventContent(arg: EventContentArg) {
-  const color = arg.event.extendedProps.color || "#22d3ee";
+  const color = arg.event.extendedProps.color || "#4ca7ff";
+
   return (
     <div className="cal-event-inner">
       <div className="cal-event-bar" style={{ background: color }} />
       <div className="cal-event-content">
         <div className="cal-event-title">{arg.event.title}</div>
-        {arg.timeText && <div className="cal-event-time">{arg.timeText}</div>}
+        {arg.timeText ? <div className="cal-event-time">{arg.timeText}</div> : null}
       </div>
     </div>
   );
 }
-
 
 function LabelLegend({
   integrations,
@@ -56,9 +59,7 @@ function LabelLegend({
       const label = integration.label?.trim();
       const color = integration.color;
       if (!label || !color) return;
-      if (!map.has(label)) {
-        map.set(label, { label, color });
-      }
+      if (!map.has(label)) map.set(label, { label, color });
     });
     return Array.from(map.values());
   }, [integrations]);
@@ -66,24 +67,22 @@ function LabelLegend({
   if (legend.length === 0) return null;
 
   return (
-    <>
-      <div className="legend-divider"></div>
-      <div className="label-legend-wrap">
-        <div className="label-legend-header">Labels</div>
-        <div className="label-legend">
-          {legend.map((item: any) => (
-            <div
-              key={item.label}
-              onClick={() => toggleLabelFilter(item.label)}
-              className={`label-legend-item${activeLabelFilters.includes(item.label) ? " active" : ""}`}
-            >
-              <span className="label-legend-item-color" style={{ background: item.color }} />
-              <span className="label-legend-item-text">{item.label}</span>
-            </div>
-          ))}
-        </div>
+    <div className="label-legend-wrap">
+      <div className="label-legend-header">Labels</div>
+      <div className="label-legend">
+        {legend.map((item: any) => (
+          <button
+            type="button"
+            key={item.label}
+            onClick={() => toggleLabelFilter(item.label)}
+            className={`label-legend-item${activeLabelFilters.includes(item.label) ? " active" : ""}`}
+          >
+            <span className="label-legend-item-color" style={{ background: item.color }} />
+            <span className="label-legend-item-text">{item.label}</span>
+          </button>
+        ))}
       </div>
-    </>
+    </div>
   );
 }
 
@@ -118,6 +117,7 @@ export default function Calendar({
   const [labelsLoading, setLabelsLoading] = useState(false);
   const [activeLabelFilters, setActiveLabelFilters] = useState<string[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<any | null>(null);
+  const [expandedDay, setExpandedDay] = useState<ExpandedDayState>(null);
 
   useEffect(() => {
     const connections = activeCalendars.reduce((acc, calendar) => {
@@ -142,6 +142,15 @@ export default function Calendar({
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (!expandedDay) return;
+    const close = () => setExpandedDay(null);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("resize", close);
+    };
+  }, [expandedDay]);
 
   const toggleLabelFilter = (label: string) => {
     setActiveLabelFilters((prev) =>
@@ -192,22 +201,22 @@ export default function Calendar({
   const handleNext = () => calendarRef.current?.getApi().next();
   const handleToday = () => calendarRef.current?.getApi().today();
 
-  const todaysDate = new Date().toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    // year: "numeric",
-  });
   const displayedMonth = () => {
     const api = calendarRef.current?.getApi();
-    if (!api) return null;
+    if (!api) {
+      return date.toLocaleDateString("en-US", {
+        month: "long",
+        year: "numeric",
+      });
+    }
+
     return new Date(api.view.currentStart).toLocaleDateString("en-US", {
       month: "long",
       year: "numeric",
     });
-  }
+  };
 
   const handleEventClick = (arg: EventClickArg) => {
-    console.log("Event clicked:", arg.event.title);
     setSelectedEvent({
       id: arg.event.id,
       title: arg.event.title,
@@ -308,316 +317,341 @@ export default function Calendar({
     google: "Google",
     microsoft: "Outlook",
   };
+
   const getInitials = (email: string) => email?.charAt(0)?.toUpperCase() || "?";
 
-  const handleDatesSet = async (info: DatesSetArg) => {
-    setActiveView(viewLabelFromType(info.view.type));
-    setDate(new Date(info.view.currentStart));
-    setVisibleRange({
-      start: new Date(info.start),
-      end: new Date(info.end),
-    });
+  const handleDatesSet = async (arg: DatesSetArg) => {
+    const currentDate = arg.view.currentStart;
+    setDate(currentDate);
+    setActiveView(viewLabelFromType(arg.view.type));
 
-    await ensureMonthsLoaded(new Date(info.start), new Date(info.end));
+    let visibleStart = arg.start;
+    let visibleEndExclusive = arg.end;
+
+    if (arg.view.type === "dayGridMonth") {
+      const viewStart = arg.view.currentStart;
+      const viewEnd = new Date(arg.view.currentEnd);
+      viewEnd.setMilliseconds(viewEnd.getMilliseconds() - 1);
+      visibleStart = viewStart;
+      visibleEndExclusive = new Date(viewEnd.getFullYear(), viewEnd.getMonth() + 1, 1);
+    }
+
+    const inclusiveVisibleEnd = new Date(visibleEndExclusive.getTime() - 1);
+    setVisibleRange({ start: visibleStart, end: inclusiveVisibleEnd });
+    await ensureMonthsLoaded(visibleStart, inclusiveVisibleEnd);
   };
 
   return (
     <>
-      {(showAuthModal === "google" || showAuthModal === "microsoft") && (
+      {showAuthModal === "google" && (
         <CalendarAuthModal
+          provider="google"
           loading={authLoading}
-          onClose={() => setShowAuthModal(null)}
-          onConnect={() => connectProvider(showAuthModal)}
-          provider={showAuthModal}
-          connected={showAuthModal === "google" ? googleConnected : outlookConnected}
+          connected={googleConnected}
+          onClose={() => {
+            setShowAuthModal(null);
+            setAuthLoading(false);
+          }}
+          onConnect={() => connectProvider("google")}
+        />
+      )}
+
+      {showAuthModal === "microsoft" && (
+        <CalendarAuthModal
+          provider="microsoft"
+          loading={authLoading}
+          connected={outlookConnected}
+          onClose={() => {
+            setShowAuthModal(null);
+            setAuthLoading(false);
+          }}
+          onConnect={() => connectProvider("microsoft")}
         />
       )}
 
       {showAuthModal === "labels" && (
         <CalendarLabelsModal
-          integrations={activeCalendars}
           loading={labelsLoading}
+          integrations={activeCalendars}
           onClose={() => setShowAuthModal(null)}
-          onSave={async (items: any[]) => {
-            await saveLabels(items);
-          }}
+          onSave={saveLabels}
         />
       )}
 
       {selectedEvent && (
-        <EventDetailsModal
-          event={selectedEvent}
-          onClose={() => setSelectedEvent(null)}
-        />
+        <EventDetailsModal event={selectedEvent} onClose={() => setSelectedEvent(null)} />
       )}
 
-      <div className="calendar-wrap">
-        <div className="calendar-topbar">
-          <div className="calendar-logo">
-            <div className="calendar-logo-icon">
-              <OrdoLogo />
-              <div className="calendar-logo-sparkle">
-                <svg
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="#a5f3fc"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M12 2L9.5 9.5 2 12l7.5 2.5L12 22l2.5-7.5L22 12l-7.5-2.5z" />
-                </svg>
-              </div>
-            </div>
-            <div>
-              <div className="calendar-logo-text">Ordo</div>
-              <div className="calendar-logo-sub">AI scheduling layer</div>
-            </div>
-          </div>
-
-          <div className="calendar-view-toggle">
-            {VIEWS.map((v) => (
-              <button
-                key={v}
-                className={`calendar-view-btn${activeView === v ? " active" : ""}`}
-                onClick={() => handleViewChange(v)}
-              >
-                {v}
+      <div className="calendar-shell">
+        <div className="calendar-board">
+          <div className="calendar-top-row">
+            <div className="calendar-period-controls">
+              <button type="button" className="calendar-period-btn">
+                <span>{new Intl.DateTimeFormat("en-US", { month: "long" }).format(date)}</span>
+                <ChevronDown size={15} />
               </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="calendar-toolbar">
-          <div className="calendar-title-group">
-            <span className="calendar-badge">
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M15 4V2M15 4V6M15 4H10.5M3 10V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19V10H3ZM3 10V6C3 4.9 3.9 4 5 4H7" />
-                <path d="M7 2V6" />
-                <path d="M21 10V6C21 4.9 20.1 4 19 4H18.5" />
-              </svg>
-              AI calendar
-            </span>
-            <div className="calendar-month">{todaysDate}</div>
-          </div>
-
-
-          <div className="calendar-nav">
-            <button className="calendar-nav-btn" onClick={handlePrev}>‹</button>
-            <button className="calendar-today-btn" onClick={handleToday}>Today</button>
-            <button className="calendar-nav-btn" onClick={handleNext}>›</button>
-          </div>
-        </div>
-
-        <div className="calendar-filters">
-          <div className="calendar-legend-wrap">
-            <div className="connections-legend-wrap">
-              <div className="label-legend-header">Connections</div>
-              <div className="connections-legend-pills">
-                {Object.keys(connectionPills).map((provider: string) => {
-                  const connections =
-                    provider === "ordo"
-                      ? [{ id: "ordo-system", email: "system@ordo" }]
-                      : providerConnections[provider] || [];
-                  const connected = connections.length > 0;
-                  const label = connectionPills[provider as keyof typeof connectionPills];
-
-                  return (
-                    <div key={provider} className="source-pill-wrapper">
-                      <button
-                        type="button"
-                        className={`source-pill ${label.toLowerCase()} ${connected ? "connected" : "inactive"}`}
-                        onClick={() =>
-                          connected && setActiveProvider(activeProvider === provider ? null : provider)
-                        }
-                      >
-                        <span className={`source-dot ${label.toLowerCase()}`} />
-                        {connected && connections.length > 0 && provider !== "ordo" && (
-                          <span className="source-count">{connections.length}</span>
-                        )}
-                        {label}
-                      </button>
-
-                      {activeProvider === provider && (
-                        <div ref={popoverRef} className="provider-popover">
-                          <div className="provider-popover-header">
-                            {provider === "microsoft" && (
-                              <span className="provider-popover-logo">
-                                <ThirdPartyLogo name="outlook" className="" />
-                              </span>
-                            )}
-                            {provider === "google" && (
-                              <span className="provider-popover-logo">
-                                <ThirdPartyLogo name="google" className="" />
-                              </span>
-                            )}
-                            {label} accounts
-                          </div>
-                          <div className="provider-popover-list">
-                            {provider === "ordo" ? (
-                              <div className="provider-account-row">
-                                <div className="provider-account-left">
-                                  <div className="provider-avatar">O</div>
-                                  <div className="provider-account-email">Ordo system</div>
-                                </div>
-                                <div className="provider-account-status active">Active</div>
-                              </div>
-                            ) : (providerConnections[provider] || []).length === 0 ? (
-                              <div className="provider-empty">No accounts connected</div>
-                            ) : (
-                              (providerConnections[provider] || []).map((acct: any) => {
-                                const isExpired = acct.token_expiry
-                                  ? new Date(acct.token_expiry) < new Date()
-                                  : false;
-
-                                return (
-                                  <div key={acct.id} className="provider-account-row">
-                                    <div className="provider-account-left">
-                                      <div className="provider-avatar">{getInitials(acct.email)}</div>
-                                      <div className="provider-account-email">{acct.email}</div>
-                                    </div>
-                                    <div
-                                      className={`provider-account-status ${isExpired ? "expired" : "active"}`}
-                                    >
-                                      {isExpired ? "Expired" : "Active"}
-                                    </div>
-                                  </div>
-                                );
-                              })
-                            )}
-                          </div>
-
-                          {provider !== "ordo" && (
-                            <div className="provider-popover-footer">
-                              <button
-                                className="provider-connect-btn"
-                                onClick={() => openModalProvider(provider, "oauth")}
-                              >
-                                Connect another
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+              <button type="button" className="calendar-period-btn calendar-period-btn--year">
+                <span>{new Intl.DateTimeFormat("en-US", { year: "numeric" }).format(date)}</span>
+                <ChevronDown size={15} />
+              </button>
             </div>
 
-            <LabelLegend
-              integrations={activeCalendars}
-              activeLabelFilters={activeLabelFilters}
-              toggleLabelFilter={toggleLabelFilter}
+            <div className="calendar-board-actions">
+              <button type="button" className="calendar-arrow-btn" onClick={handlePrev}>‹</button>
+              <button type="button" className="calendar-arrow-btn" onClick={handleNext}>›</button>
+            </div>
+          </div>
+
+          <div className="calendar-utility-row">
+            <div className="calendar-legend-wrap">
+              <div className="connections-legend-wrap">
+                <div className="label-legend-header">Connections</div>
+                <div className="connections-legend-pills">
+                  {Object.keys(connectionPills).map((provider: string) => {
+                    const connections =
+                      provider === "ordo"
+                        ? [{ id: "ordo-system", email: "system@ordo" }]
+                        : providerConnections[provider] || [];
+                    const connected = connections.length > 0;
+                    const label = connectionPills[provider as keyof typeof connectionPills];
+
+                    return (
+                      <div key={provider} className="source-pill-wrapper">
+                        <button
+                          type="button"
+                          className={`source-pill ${label.toLowerCase()} ${connected ? "connected" : "inactive"}`}
+                          onClick={() =>
+                            connected && setActiveProvider(activeProvider === provider ? null : provider)
+                          }
+                          aria-expanded={activeProvider === provider}
+                          title={
+                            connected
+                              ? `View ${label} accounts`
+                              : `No ${label} accounts connected`
+                          }
+                        >
+                          <span className={`source-dot ${label.toLowerCase()}`} />
+                          {connected && connections.length > 0 && provider !== "ordo" ? (
+                            <span className="source-count">{connections.length}</span>
+                          ) : null}
+                          {label}
+                        </button>
+
+                        {activeProvider === provider ? (
+                          <div ref={popoverRef} className="provider-popover">
+                            <div className="provider-popover-header">
+                              {provider === "microsoft" ? (
+                                <span className="provider-popover-logo">
+                                  <ThirdPartyLogo name="outlook" className="" />
+                                </span>
+                              ) : null}
+                              {provider === "google" ? (
+                                <span className="provider-popover-logo">
+                                  <ThirdPartyLogo name="google" className="" />
+                                </span>
+                              ) : null}
+                              {label} accounts
+                            </div>
+                            <div className="provider-popover-list">
+                              {provider === "ordo" ? (
+                                <div className="provider-account-row">
+                                  <div className="provider-account-left">
+                                    <div className="provider-avatar">O</div>
+                                    <div className="provider-account-email">Ordo system</div>
+                                  </div>
+                                  <div className="provider-account-status active">Active</div>
+                                </div>
+                              ) : (providerConnections[provider] || []).length === 0 ? (
+                                <div className="provider-empty">No accounts connected</div>
+                              ) : (
+                                (providerConnections[provider] || []).map((acct: any) => {
+                                  const isExpired = acct.token_expiry
+                                    ? new Date(acct.token_expiry) < new Date()
+                                    : false;
+
+                                  return (
+                                    <div key={acct.id} className="provider-account-row">
+                                      <div className="provider-account-left">
+                                        <div className="provider-avatar">{getInitials(acct.email)}</div>
+                                        <div className="provider-account-email">{acct.email}</div>
+                                      </div>
+                                      <div className={`provider-account-status ${isExpired ? "expired" : "active"}`}>
+                                        {isExpired ? "Expired" : "Active"}
+                                      </div>
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+
+                            {provider !== "ordo" ? (
+                              <div className="provider-popover-footer">
+                                <button
+                                  type="button"
+                                  className="provider-connect-btn"
+                                  onClick={() => openModalProvider(provider, "oauth")}
+                                >
+                                  Connect another
+                                </button>
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <LabelLegend
+                integrations={activeCalendars}
+                activeLabelFilters={activeLabelFilters}
+                toggleLabelFilter={toggleLabelFilter}
+              />
+            </div>
+
+            <div className="calendar-actions">
+              <div className="connections-menu-wrap" ref={connectionsMenuRef}>
+                <button
+                  type="button"
+                  className="oauth-action-btn labels-menu-btn"
+                  onClick={() => {
+                    setShowAuthModal("labels");
+                    setShowConnectionsMenu(false);
+                    setActiveProvider(null);
+                  }}
+                >
+                  <Tag size={14} />
+                  Labels
+                </button>
+
+                <button
+                  type="button"
+                  className="oauth-action-btn"
+                  onClick={() => setShowConnectionsMenu((prev) => !prev)}
+                >
+                  <Link2 size={14} />
+                  Connections
+                  <ChevronDown size={14} />
+                </button>
+
+                {showConnectionsMenu ? (
+                  <div className="connections-menu">
+                    <button
+                      type="button"
+                      className="connections-menu-item"
+                      onClick={() => openModalProvider("google", "oauth")}
+                    >
+                      <ThirdPartyLogo name="google" className="connections-menu-logo" />
+                      Connect Google
+                    </button>
+                    <button
+                      type="button"
+                      className="connections-menu-item"
+                      onClick={() => openModalProvider("microsoft", "oauth")}
+                    >
+                      <ThirdPartyLogo name="outlook" className="connections-menu-logo" />
+                      Connect Outlook
+                    </button>
+                    {googleConnected && outlookConnected ? (
+                      <div className="connections-menu-empty">All calendar providers connected</div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="calendar-view-toggle">
+                {VIEWS.map((v) => (
+                  <button
+                    key={v}
+                    className={`calendar-view-btn${activeView === v ? " active" : ""}`}
+                    onClick={() => handleViewChange(v)}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+
+              <button type="button" className="calendar-today-btn" onClick={handleToday}>
+                Today
+              </button>
+
+              {loading ? <span className="calendar-loading">Syncing...</span> : null}
+            </div>
+          </div>
+
+          <div className="displayed-month">{displayedMonth()}</div>
+
+          <div className="calendar-grid-wrap">
+            <FullCalendar
+              ref={calendarRef}
+              plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+              initialView="dayGridMonth"
+              headerToolbar={false}
+              events={calendarEvents}
+              eventContent={renderEventContent}
+              eventClick={handleEventClick}
+              height="100%"
+              expandRows
+              nowIndicator
+              slotMinTime="06:00:00"
+              slotMaxTime="22:00:00"
+              allDaySlot={true}
+              dayMaxEvents={3}
+              moreLinkClick={((arg: MoreLinkArg) => {
+                const target = (arg.jsEvent?.currentTarget || arg.jsEvent?.target) as HTMLElement | null;
+                const cell = (target?.closest(".fc-daygrid-day") as HTMLElement | null) ?? target;
+                const cellRect = cell?.getBoundingClientRect();
+                const fallback = target?.getBoundingClientRect();
+                const source = cellRect ?? fallback;
+                const rect = source
+                  ? {
+                      top: source.top,
+                      left: source.left,
+                      width: source.width,
+                      height: source.height,
+                    }
+                  : {
+                      top: window.innerHeight / 2 - 60,
+                      left: window.innerWidth / 2 - 100,
+                      width: 200,
+                      height: 120,
+                    };
+                const allEvents: ExpandedDayEvent[] = [
+                  ...arg.allSegs.map((s) => ({
+                    id: s.event.id,
+                    title: s.event.title,
+                    start: s.event.start ?? null,
+                    end: s.event.end ?? null,
+                    allDay: s.event.allDay,
+                    extendedProps: s.event.extendedProps,
+                  })),
+                ];
+                setExpandedDay({ date: arg.date, events: allEvents, rect });
+                arg.jsEvent?.preventDefault();
+                return false;
+              }) as any}
+              datesSet={handleDatesSet}
             />
           </div>
-
-          <div className="calendar-actions">
-            <div className="connections-menu-wrap" ref={connectionsMenuRef}>
-              <button
-                type="button"
-                className="oauth-action-btn labels-menu-btn"
-                onClick={() => {
-                  setShowAuthModal("labels");
-                  setShowConnectionsMenu(false);
-                  setActiveProvider(null);
-                }}
-              >
-                <Tag size={14} />
-                Labels
-              </button>
-
-              <button
-                type="button"
-                className="oauth-action-btn"
-                onClick={() => setShowConnectionsMenu((prev) => !prev)}
-              >
-                <Link2 size={14} />
-                Connections
-                <ChevronDown size={14} />
-              </button>
-
-              {showConnectionsMenu && (
-                <div className="connections-menu">
-                  <button
-                    type="button"
-                    className="connections-menu-item"
-                    onClick={() => openModalProvider("google", "oauth")}
-                  >
-                    <ThirdPartyLogo name="google" className="connections-menu-logo" />
-                    Connect Google
-                  </button>
-                  <button
-                    type="button"
-                    className="connections-menu-item"
-                    onClick={() => openModalProvider("microsoft", "oauth")}
-                  >
-                    <ThirdPartyLogo name="outlook" className="connections-menu-logo" />
-                    Connect Outlook
-                  </button>
-                  {googleConnected && outlookConnected && (
-                    <div className="connections-menu-empty">
-                      All calendar providers connected
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="filter-pill">
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
-              </svg>
-              Filters
-            </div>
-
-            {loading && <span className="calendar-loading">Syncing...</span>}
-          </div>
-        </div>
-
-        <div className="displayed-month">
-          {displayedMonth()}
-        </div>
-
-        <div className="calendar-grid-wrap">
-          <FullCalendar
-            ref={calendarRef}
-            plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-            initialView="dayGridMonth"
-            headerToolbar={false}
-            events={calendarEvents}
-            eventContent={renderEventContent}
-            eventClick={handleEventClick}
-            height="100%"
-            nowIndicator
-            slotMinTime="06:00:00"
-            slotMaxTime="22:00:00"
-            allDaySlot={true}
-            dayMaxEvents={3}
-            datesSet={handleDatesSet}
-          />
         </div>
       </div>
+
+      <ExpandedDayOverlay
+        expandedDay={expandedDay}
+        onClose={() => setExpandedDay(null)}
+        onSelectEvent={(ev) => {
+          setSelectedEvent({
+            id: ev.id,
+            title: ev.title,
+            start: ev.start ?? null,
+            end: ev.end ?? null,
+            allDay: ev.allDay,
+            extendedProps: ev.extendedProps,
+          });
+          setExpandedDay(null);
+        }}
+      />
     </>
   );
 }

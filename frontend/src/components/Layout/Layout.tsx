@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from "react";
+import { CalendarDays, Grid2x2, PieChart, Mail, Briefcase, Settings, LogOut } from "lucide-react";
 import Calendar from "../Calendar/Calendar";
 import AgentChat from "../AgentChat/AgentChat";
 import { useEvents } from "../../hooks/useEvents";
@@ -7,9 +8,16 @@ import config from "../../config";
 import toast from "react-hot-toast";
 import "./Layout.css";
 
+const NAV_ITEMS = [
+  { key: "overview", icon: Grid2x2, active: false },
+  { key: "calendar", icon: CalendarDays, active: true },
+  { key: "insights", icon: PieChart, active: false },
+  { key: "messages", icon: Mail, active: false },
+  { key: "work", icon: Briefcase, active: false },
+];
+
 export default function Layout() {
   const [activeCalendars, setActiveCalendars] = useState<any[]>([]);
-  const [dragging, setDragging] = useState(false);
   const [date, setDate] = useState(new Date());
   const [visibleRange, setVisibleRange] = useState<{ start: Date; end: Date } | null>(null);
 
@@ -37,12 +45,6 @@ export default function Layout() {
   });
 
   const { messages, loading: agentLoading, error, sendMessage } = useAgent(refetch);
-
-  const onMouseDown = useCallback(() => setDragging(true), []);
-  const onMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!dragging) return;
-  }, [dragging]);
-  const onMouseUp = useCallback(() => setDragging(false), []);
 
   const fetchActiveCalendars = useCallback(async () => {
     try {
@@ -78,38 +80,78 @@ export default function Layout() {
   }, [fetchActiveCalendars, refetch]);
 
   return (
-    <div
-      className={`layout${dragging ? " layout--dragging" : ""}`}
-      onMouseMove={onMouseMove}
-      onMouseUp={onMouseUp}
-    >
-      <div className="layout-inner">
-        <div className="layout-calendar">
-          <Calendar
-            events={events}
-            loading={eventsLoading}
-            activeCalendars={activeCalendars}
-            date={date}
-            setDate={setDate}
-            setVisibleRange={updateVisibleRange}
-            ensureMonthsLoaded={ensureMonthsLoaded}
-            refetch={handleCalendarRefetch}
-          />
-        </div>
+    <div className="layout">
+      <div className="layout-shell">
+        <aside className="layout-sidebar">
+          <div className="layout-brand-mark">v</div>
 
-        <div className="layout-divider" onMouseDown={onMouseDown}>
-          <div className="divider-handle" />
-        </div>
+          <div className="layout-sidebar-nav">
+            {NAV_ITEMS.map(({ key, icon: Icon, active }) => (
+              <button
+                key={key}
+                type="button"
+                className={`layout-sidebar-btn${active ? " active" : ""}`}
+                aria-label={key}
+              >
+                <Icon size={18} />
+              </button>
+            ))}
+          </div>
 
-        <div className="layout-agent">
-          <AgentChat
-            messages={messages}
-            loading={agentLoading}
-            error={error}
-            onSend={sendMessage}
-          />
+          <div className="layout-sidebar-footer">
+            <button type="button" className="layout-sidebar-btn" aria-label="settings">
+              <Settings size={18} />
+            </button>
+            <button type="button" className="layout-sidebar-btn" aria-label="logout">
+              <LogOut size={18} />
+            </button>
+            <div className="layout-avatar" aria-hidden="true">
+              NS
+            </div>
+          </div>
+        </aside>
+
+        <div className="layout-main-card">
+          <div className="layout-main-header">
+            <div>
+              <h1 className="layout-title">Morning, Nate!</h1>
+              <p className="layout-subtitle">Here’s what’s on your agenda today.</p>
+            </div>
+
+            <div className="layout-header-actions">
+              <div className="layout-search-pill">
+                <span className="layout-search-icon">⌕</span>
+                <span>Search for some activities</span>
+              </div>
+              <button type="button" className="layout-spark-btn" aria-label="spark actions">
+                ✦
+              </button>
+            </div>
+          </div>
+
+          <div className="layout-inner">
+            <div className="layout-calendar">
+              <Calendar
+                events={events}
+                loading={eventsLoading}
+                activeCalendars={activeCalendars}
+                date={date}
+                setDate={setDate}
+                setVisibleRange={updateVisibleRange}
+                ensureMonthsLoaded={ensureMonthsLoaded}
+                refetch={handleCalendarRefetch}
+              />
+            </div>
+          </div>
         </div>
       </div>
+
+      <AgentChat
+        messages={messages}
+        loading={agentLoading}
+        error={error}
+        onSend={sendMessage}
+      />
     </div>
   );
 }

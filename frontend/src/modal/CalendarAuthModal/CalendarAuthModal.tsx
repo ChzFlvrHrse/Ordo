@@ -5,20 +5,19 @@ import "./CalendarAuthModal.css";
 
 function OrdoMark() {
     return (
-        <svg viewBox="0 0 28 28" width="28" height="28">
+        <svg viewBox="0 0 28 28" width="28" height="28" fill="none" aria-hidden="true">
             <defs>
                 <linearGradient id="ordoGrad" x1="2" y1="2" x2="26" y2="26">
-                    <stop stopColor="#22D3EE" />
-                    <stop offset="1" stopColor="#0EA5E9" />
+                    <stop stopColor="#60A5FA" />
+                    <stop offset="1" stopColor="#A78BFA" />
                 </linearGradient>
             </defs>
 
-            <rect x="2" y="5" width="24" height="21" rx="5" stroke="url(#ordoGrad)" strokeWidth="1.6" />
-            <rect x="8" y="2" width="2.2" height="6" rx="1.1" fill="url(#ordoGrad)" />
-            <rect x="18" y="2" width="2.2" height="6" rx="1.1" fill="url(#ordoGrad)" />
-            <rect x="6" y="12.5" width="4" height="4" rx="1.1" fill="url(#ordoGrad)" opacity="0.35" />
-            <rect x="12" y="12.5" width="4" height="4" rx="1.1" fill="url(#ordoGrad)" />
-            <rect x="18" y="12.5" width="4" height="4" rx="1.1" fill="url(#ordoGrad)" opacity="0.35" />
+            <rect x="4" y="4" width="20" height="20" rx="6" stroke="url(#ordoGrad)" strokeWidth="1.8" />
+            <rect x="9" y="9" width="4" height="4" rx="1.4" fill="url(#ordoGrad)" />
+            <rect x="15" y="9" width="4" height="4" rx="1.4" fill="url(#ordoGrad)" />
+            <rect x="9" y="15" width="4" height="4" rx="1.4" fill="url(#ordoGrad)" />
+            <rect x="15" y="15" width="4" height="4" rx="1.4" fill="url(#ordoGrad)" />
         </svg>
     );
 }
@@ -49,8 +48,14 @@ export default function CalendarAuthModal({
         <div className="ordo-modal-overlay">
             <div className="ordo-modal-backdrop" onClick={onClose} />
 
-            <div className="ordo-modal">
-                <button className="ordo-modal-close" onClick={onClose}>
+            <div
+                className="ordo-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="ordo-modal-title"
+                aria-describedby="ordo-modal-description"
+            >
+                <button className="ordo-modal-close" onClick={onClose} aria-label="Close modal">
                     <X size={14} />
                 </button>
 
@@ -63,9 +68,11 @@ export default function CalendarAuthModal({
                     </div>
 
                     <div>
-                        <div className="ordo-title">Connect {providerLabel} Calendar</div>
-                        <div className="ordo-sub">
-                            Let Ordo manage scheduling with live calendar access
+                        <div id="ordo-modal-title" className="ordo-title">
+                            Connect {providerLabel} Calendar
+                        </div>
+                        <div id="ordo-modal-description" className="ordo-sub">
+                            Let Ordo manage scheduling with live calendar access.
                         </div>
                     </div>
                 </div>
@@ -73,6 +80,7 @@ export default function CalendarAuthModal({
                 <div className="ordo-connection-row">
                     {provider === "google" && <ThirdPartyLogo name="google" className="ordo-connection-logo" />}
                     {provider === "microsoft" && <ThirdPartyLogo name="outlook" className="ordo-connection-logo" />}
+
                     <div className="ordo-connection-text">
                         <div>{providerLabel} Calendar</div>
                         <span>Secure OAuth connection</span>
@@ -80,7 +88,8 @@ export default function CalendarAuthModal({
 
                     {connected ? (
                         <div className="ordo-badge success">
-                            <CheckCircle2 size={12} /> Connected
+                            <CheckCircle2 size={12} />
+                            Connected
                         </div>
                     ) : (
                         <span className="ordo-muted">Not connected</span>
@@ -94,21 +103,19 @@ export default function CalendarAuthModal({
                         <ShieldCheck size={14} />
                         Check availability before booking
                     </div>
+
                     <div className="ordo-permission">
                         <ShieldCheck size={14} />
                         Create and manage events
                     </div>
+
                     <div className="ordo-permission">
                         <ShieldCheck size={14} />
                         Send invites automatically
                     </div>
                 </div>
 
-                <button
-                    className="ordo-cta"
-                    onClick={onConnect}
-                    disabled={loading}
-                >
+                <button className="ordo-cta" onClick={onConnect} disabled={loading}>
                     {loading ? (
                         <div className="spinner" />
                     ) : (

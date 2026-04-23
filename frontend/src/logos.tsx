@@ -31,14 +31,27 @@ function OrdoLogo() {
 function ThirdPartyLogo({
     name,
     alt,
-    className = "h-10 w-10",
+    className,
+    size = 18,
 }: {
     name: ThirdPartyLogoName;
     alt?: string;
     className?: string;
+    size?: number;
 }) {
     const { src, alt: defaultAlt } = LOGOS[name];
-    return <img src={src} alt={alt ?? defaultAlt} className={className} loading="eager" decoding="async" />;
+    return (
+        <img
+            src={src}
+            alt={alt ?? defaultAlt}
+            className={className}
+            width={size}
+            height={size}
+            style={{ objectFit: "contain", flexShrink: 0 }}
+            loading="eager"
+            decoding="async"
+        />
+    );
 }
 
 export { OrdoLogo, ThirdPartyLogo };

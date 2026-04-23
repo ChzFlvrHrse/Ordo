@@ -1,114 +1,130 @@
 .ordo-modal-overlay {
     position: fixed;
     inset: 0;
-    z-index: 50;
+    z-index: 70;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 16px;
+    padding: 24px;
 }
 
 .ordo-modal-backdrop {
     position: absolute;
     inset: 0;
-    background: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(6px);
+    background:
+        radial-gradient(circle at top, rgba(96, 165, 250, 0.08), transparent 32%),
+        rgba(7, 17, 31, 0.72);
+    backdrop-filter: blur(10px);
 }
 
 .ordo-modal {
     position: relative;
     width: 100%;
-    max-width: 480px;
-    padding: 24px;
-    border-radius: 26px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    background: linear-gradient(180deg, #131a27, #0b1018);
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-    color: white;
-    transition: transform 0.2s ease;
-}
-
-.ordo-modal:hover {
-    transform: translateY(-2px);
+    max-width: 520px;
+    padding: 26px;
+    border-radius: 30px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background:
+        radial-gradient(circle at top left, rgba(96, 165, 250, 0.1), transparent 28%),
+        linear-gradient(180deg, rgba(49, 65, 91, 0.94), rgba(39, 50, 72, 0.96));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.04),
+        0 30px 80px rgba(0, 0, 0, 0.38);
+    color: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(18px);
 }
 
 .ordo-modal-close {
     position: absolute;
-    top: 12px;
-    right: 12px;
+    top: 14px;
+    right: 14px;
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
     background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 999px;
-    padding: 6px;
     cursor: pointer;
-    color: rgba(255, 255, 255, 0.7);
-    transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+    color: rgba(255, 255, 255, 0.58);
+    transition: all 0.18s ease;
 }
 
 .ordo-modal-close:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: white;
-    border-color: rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.09);
+    color: rgba(255, 255, 255, 0.95);
+    border-color: rgba(255, 255, 255, 0.14);
 }
 
 .ordo-modal-header {
     display: flex;
-    gap: 12px;
-    margin-bottom: 18px;
     align-items: flex-start;
+    gap: 14px;
+    margin-bottom: 22px;
+    padding-right: 34px;
 }
 
 .ordo-logo {
     position: relative;
-    padding: 10px;
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.05);
+    width: 56px;
+    height: 56px;
+    display: grid;
+    place-items: center;
+    border-radius: 18px;
+    background:
+        radial-gradient(circle at top left, rgba(96, 165, 250, 0.18), transparent 55%),
+        rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
     flex-shrink: 0;
 }
 
 .ordo-sparkle {
     position: absolute;
-    top: -4px;
-    right: -4px;
-    background: rgba(34, 211, 238, 0.2);
-    border: 1px solid rgba(34, 211, 238, 0.2);
+    top: -5px;
+    right: -5px;
+    width: 20px;
+    height: 20px;
+    display: grid;
+    place-items: center;
     border-radius: 999px;
-    padding: 2px;
-    color: #cffafe;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    background: rgba(96, 165, 250, 0.18);
+    border: 1px solid rgba(96, 165, 250, 0.22);
+    color: #dbeafe;
+    box-shadow: 0 8px 16px rgba(59, 130, 246, 0.14);
 }
 
 .ordo-title {
-    font-size: 20px;
+    font-size: 24px;
     font-weight: 600;
-    line-height: 1.2;
-    letter-spacing: -0.02em;
+    line-height: 1.1;
+    letter-spacing: -0.03em;
+    color: rgba(255, 255, 255, 0.96);
 }
 
 .ordo-sub {
-    margin-top: 4px;
+    margin-top: 6px;
     font-size: 14px;
-    line-height: 1.5;
-    color: rgba(255, 255, 255, 0.5);
+    line-height: 1.55;
+    color: rgba(255, 255, 255, 0.56);
+    max-width: 360px;
 }
 
 .ordo-connection-row {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 12px 14px;
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    margin-bottom: 14px;
+    gap: 12px;
+    padding: 14px 15px;
+    border-radius: 20px;
+    background: rgba(58, 70, 94, 0.62);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+    margin-bottom: 18px;
 }
 
 .ordo-connection-logo {
-    width: 22px;
-    height: 22px;
+    width: 24px;
+    height: 24px;
     flex-shrink: 0;
 }
 
@@ -125,57 +141,62 @@
     flex: 1;
 }
 
-.ordo-connection-text>div {
+.ordo-connection-text > div {
     font-size: 15px;
     font-weight: 500;
-    color: rgba(255, 255, 255, 0.92);
+    color: rgba(255, 255, 255, 0.94);
 }
 
 .ordo-connection-text span {
     font-size: 12px;
-    color: rgba(255, 255, 255, 0.5);
-    margin-top: 2px;
+    color: rgba(255, 255, 255, 0.48);
+    margin-top: 3px;
 }
 
 .ordo-badge.success {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    background: rgba(34, 197, 94, 0.15);
-    color: #bbf7d0;
-    padding: 4px 8px;
+    gap: 5px;
+    padding: 5px 9px;
     border-radius: 999px;
     font-size: 11px;
-    border: 1px solid rgba(34, 197, 94, 0.2);
+    font-weight: 600;
     white-space: nowrap;
+    background: rgba(52, 211, 153, 0.14);
+    color: #bbf7d0;
+    border: 1px solid rgba(52, 211, 153, 0.18);
 }
 
 .ordo-muted {
     font-size: 11px;
-    color: rgba(255, 255, 255, 0.4);
+    color: rgba(255, 255, 255, 0.38);
     white-space: nowrap;
 }
 
 .ordo-permissions {
-    margin-bottom: 18px;
+    margin-bottom: 20px;
+    padding: 16px;
+    border-radius: 22px;
+    background: rgba(255, 255, 255, 0.035);
+    border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .ordo-permissions-title {
     font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: rgba(255, 255, 255, 0.6);
-    margin-bottom: 8px;
+    letter-spacing: 0.14em;
+    color: rgba(255, 255, 255, 0.42);
+    margin-bottom: 12px;
 }
 
 .ordo-permission {
     display: flex;
     align-items: flex-start;
-    gap: 8px;
+    gap: 10px;
     font-size: 14px;
     line-height: 1.5;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
     color: rgba(255, 255, 255, 0.78);
 }
 
@@ -186,16 +207,17 @@
 .ordo-permission svg {
     flex-shrink: 0;
     margin-top: 2px;
-    color: #a5f3fc;
+    color: #93c5fd;
 }
 
 .ordo-cta {
     width: 100%;
-    padding: 12px;
-    border-radius: 16px;
-    background: linear-gradient(135deg, #22d3ee, #0ea5e9);
+    min-height: 48px;
+    padding: 12px 14px;
+    border-radius: 18px;
+    background: linear-gradient(135deg, #60a5fa, #a78bfa);
     border: none;
-    color: #041018;
+    color: white;
     font-weight: 600;
     font-size: 14px;
     cursor: pointer;
@@ -204,24 +226,24 @@
     justify-content: center;
     gap: 8px;
     transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
-    box-shadow: 0 10px 24px rgba(14, 165, 233, 0.24);
+    box-shadow: 0 14px 30px rgba(96, 165, 250, 0.2);
 }
 
 .ordo-cta:hover:not(:disabled) {
     transform: translateY(-1px);
-    box-shadow: 0 14px 30px rgba(14, 165, 233, 0.3);
+    box-shadow: 0 18px 36px rgba(96, 165, 250, 0.26);
 }
 
 .ordo-cta:disabled {
-    opacity: 0.65;
+    opacity: 0.68;
     cursor: not-allowed;
 }
 
 .spinner {
     width: 14px;
     height: 14px;
-    border: 2px solid rgba(0, 0, 0, 0.2);
-    border-top: 2px solid #041018;
+    border: 2px solid rgba(255, 255, 255, 0.28);
+    border-top: 2px solid rgba(255, 255, 255, 0.95);
     border-radius: 50%;
     animation: spin 1s linear infinite;
 }
@@ -229,5 +251,26 @@
 @keyframes spin {
     to {
         transform: rotate(360deg);
+    }
+}
+
+@media (max-width: 640px) {
+    .ordo-modal-overlay {
+        padding: 14px;
+        align-items: flex-end;
+    }
+
+    .ordo-modal {
+        max-width: 100%;
+        padding: 22px 18px 18px;
+        border-radius: 26px 26px 20px 20px;
+    }
+
+    .ordo-title {
+        font-size: 21px;
+    }
+
+    .ordo-sub {
+        font-size: 13px;
     }
 }
