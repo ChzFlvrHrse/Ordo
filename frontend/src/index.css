@@ -42,7 +42,7 @@
       rgba(255, 255, 255, 0.03) 100%
     );
 
-  --logo-gradient: linear-gradient(135deg, var(--blue-light), var(--purple));
+  --logo-gradient: linear-gradient(135deg, var(--blue), var(--blue-light));
 
   --selected-day-bg: #36527a;
   --selected-day-border: rgba(56, 189, 248, 0.35);

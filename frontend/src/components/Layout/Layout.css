@@ -30,10 +30,11 @@
 
   .layout-brand-mark {
     margin-top: 2px;
-    font-size: 34px;
-    line-height: 1;
-    font-weight: 700;
-    color: #59b3ff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
   }
 
   .layout-sidebar-nav,

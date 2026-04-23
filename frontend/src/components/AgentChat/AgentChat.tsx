@@ -1,10 +1,11 @@
 import React, { useRef, useEffect, useState } from "react";
-import { Check, Copy, Mic, Send, Square, Volume2, X, Zap } from "lucide-react";
+import { Check, Copy, Mic, Send, Square, Volume2, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { useTTS } from "../../hooks/useTTS";
 import { useSTT } from "../../hooks/useSTT";
 import { Message } from "../../hooks/useAgent";
 import ReactMarkdown from "react-markdown";
+import OrdoLogo from "../OrdoLogo/OrdoLogo";
 import "./AgentChat.css";
 
 interface AgentChatProps {
@@ -113,7 +114,7 @@ export default function AgentChat({ messages, loading, error, onSend }: AgentCha
                     aria-label="Open Ordo"
                 >
                     <div className="ordo-widget-avatar" aria-hidden="true">
-                        <Zap size={18} />
+                        <OrdoLogo size={40} withSparkle={false} className="ordo-widget-avatar-img" />
                     </div>
                     <div className="ordo-widget-pill-text">
                         <div className="ordo-widget-pill-title">Ordo</div>
@@ -125,7 +126,7 @@ export default function AgentChat({ messages, loading, error, onSend }: AgentCha
                     <div className="ordo-widget-header">
                         <div className="ordo-widget-brand">
                             <div className="ordo-widget-avatar ordo-widget-avatar--sm" aria-hidden="true">
-                                <Zap size={14} />
+                                <OrdoLogo size={28} withSparkle={false} className="ordo-widget-avatar-img" />
                             </div>
                             <span>Ordo</span>
                         </div>

@@ -1,25 +1,11 @@
 import React from "react";
-import { ArrowRight, CheckCircle2, ShieldCheck, X, Sparkles } from "lucide-react";
+import { ArrowRight, CheckCircle2, ShieldCheck, X } from "lucide-react";
 import { ThirdPartyLogo } from "../../logos";
+import OrdoLogo from "../../components/OrdoLogo/OrdoLogo";
 import "./CalendarAuthModal.css";
 
 function OrdoMark() {
-    return (
-        <svg viewBox="0 0 28 28" width="28" height="28" fill="none" aria-hidden="true">
-            <defs>
-                <linearGradient id="ordoGrad" x1="2" y1="2" x2="26" y2="26">
-                    <stop stopColor="#60A5FA" />
-                    <stop offset="1" stopColor="#A78BFA" />
-                </linearGradient>
-            </defs>
-
-            <rect x="4" y="4" width="20" height="20" rx="6" stroke="url(#ordoGrad)" strokeWidth="1.8" />
-            <rect x="9" y="9" width="4" height="4" rx="1.4" fill="url(#ordoGrad)" />
-            <rect x="15" y="9" width="4" height="4" rx="1.4" fill="url(#ordoGrad)" />
-            <rect x="9" y="15" width="4" height="4" rx="1.4" fill="url(#ordoGrad)" />
-            <rect x="15" y="15" width="4" height="4" rx="1.4" fill="url(#ordoGrad)" />
-        </svg>
-    );
+    return <OrdoLogo size={48} className="ordo-mark-img" />;
 }
 
 interface Props {
@@ -62,9 +48,6 @@ export default function CalendarAuthModal({
                 <div className="ordo-modal-header">
                     <div className="ordo-logo">
                         <OrdoMark />
-                        <div className="ordo-sparkle">
-                            <Sparkles size={10} />
-                        </div>
                     </div>
 
                     <div>

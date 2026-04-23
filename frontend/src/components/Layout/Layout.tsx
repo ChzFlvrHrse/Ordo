@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect } from "react";
 import { CalendarDays, Grid2x2, PieChart, Mail, Briefcase, Settings, LogOut } from "lucide-react";
 import Calendar from "../Calendar/Calendar";
 import AgentChat from "../AgentChat/AgentChat";
+import OrdoLogo from "../OrdoLogo/OrdoLogo";
 import { useEvents } from "../../hooks/useEvents";
 import { useAgent } from "../../hooks/useAgent";
 import config from "../../config";
@@ -83,7 +84,9 @@ export default function Layout() {
     <div className="layout">
       <div className="layout-shell">
         <aside className="layout-sidebar">
-          <div className="layout-brand-mark">v</div>
+          <div className="layout-brand-mark" aria-label="Ordo">
+            <OrdoLogo size={36} />
+          </div>
 
           <div className="layout-sidebar-nav">
             {NAV_ITEMS.map(({ key, icon: Icon, active }) => (
