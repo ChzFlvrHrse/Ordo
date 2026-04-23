@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Check, Palette, Save, X } from "lucide-react";
-import { GoogleLogo, OutlookLogo } from "../../logos";
+import { ThirdPartyLogo } from "../../logos";
 import "./CalendarLabelsModal.css";
 
 type CalendarIntegration = {
@@ -37,8 +37,8 @@ function getProviderLabel(provider: string) {
 }
 
 function ProviderLogo({ provider }: { provider: string }) {
-  if (provider === "google") return <GoogleLogo className="calendar-label-provider-logo" />;
-  if (provider === "microsoft") return <OutlookLogo className="calendar-label-provider-logo" />;
+  if (provider === "google") return <ThirdPartyLogo name="google" className="calendar-label-provider-logo" />;
+  if (provider === "microsoft") return <ThirdPartyLogo name="outlook" className="calendar-label-provider-logo" />;
   return null;
 }
 

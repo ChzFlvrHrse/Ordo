@@ -1,6 +1,6 @@
 import React from "react";
 import { ArrowRight, CheckCircle2, ShieldCheck, X, Sparkles } from "lucide-react";
-import { GoogleLogo, OutlookLogo } from "../../logos";
+import { ThirdPartyLogo } from "../../logos";
 import "./CalendarAuthModal.css";
 
 function OrdoMark() {
@@ -71,8 +71,8 @@ export default function CalendarAuthModal({
                 </div>
 
                 <div className="ordo-connection-row">
-                    {provider === "google" && <GoogleLogo className="ordo-connection-logo" />}
-                    {provider === "microsoft" && <OutlookLogo className="ordo-connection-logo" />}
+                    {provider === "google" && <ThirdPartyLogo name="google" className="ordo-connection-logo" />}
+                    {provider === "microsoft" && <ThirdPartyLogo name="outlook" className="ordo-connection-logo" />}
                     <div className="ordo-connection-text">
                         <div>{providerLabel} Calendar</div>
                         <span>Secure OAuth connection</span>
@@ -113,8 +113,8 @@ export default function CalendarAuthModal({
                         <div className="spinner" />
                     ) : (
                         <>
-                            {provider === "google" && <GoogleLogo className="ordo-cta-logo" />}
-                            {provider === "microsoft" && <OutlookLogo className="ordo-cta-logo" />}
+                            {provider === "google" && <ThirdPartyLogo name="google" className="ordo-cta-logo" />}
+                            {provider === "microsoft" && <ThirdPartyLogo name="outlook" className="ordo-cta-logo" />}
                             Continue with {providerLabel}
                             <ArrowRight size={14} />
                         </>

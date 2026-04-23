@@ -7,7 +7,7 @@ import { DatesSetArg, EventClickArg, EventContentArg } from "@fullcalendar/core"
 import { ChevronDown, Link2, Tag } from "lucide-react";
 import toast from "react-hot-toast";
 import { OrdoEvent } from "../../hooks/useEvents";
-import { GoogleLogo, OutlookLogo, OrdoLogo } from "../../logos";
+import { ThirdPartyLogo, OrdoLogo } from "../../logos";
 import config from "../../config";
 import "./Calendar.css";
 
@@ -454,12 +454,12 @@ export default function Calendar({
                           <div className="provider-popover-header">
                             {provider === "microsoft" && (
                               <span className="provider-popover-logo">
-                                <OutlookLogo className="" />
+                                <ThirdPartyLogo name="outlook" className="" />
                               </span>
                             )}
                             {provider === "google" && (
                               <span className="provider-popover-logo">
-                                <GoogleLogo className="" />
+                                <ThirdPartyLogo name="google" className="" />
                               </span>
                             )}
                             {label} accounts
@@ -555,7 +555,7 @@ export default function Calendar({
                     className="connections-menu-item"
                     onClick={() => openModalProvider("google", "oauth")}
                   >
-                    <GoogleLogo className="connections-menu-logo" />
+                    <ThirdPartyLogo name="google" className="connections-menu-logo" />
                     Connect Google
                   </button>
                   <button
@@ -563,7 +563,7 @@ export default function Calendar({
                     className="connections-menu-item"
                     onClick={() => openModalProvider("microsoft", "oauth")}
                   >
-                    <OutlookLogo className="connections-menu-logo" />
+                    <ThirdPartyLogo name="outlook" className="connections-menu-logo" />
                     Connect Outlook
                   </button>
                   {googleConnected && outlookConnected && (

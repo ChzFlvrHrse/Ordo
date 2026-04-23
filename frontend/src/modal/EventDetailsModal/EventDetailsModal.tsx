@@ -1,5 +1,5 @@
 import React from "react";
-import { GoogleLogo, OutlookLogo } from "../../logos";
+import { ThirdPartyLogo } from "../../logos";
 import "./EventDetailsModal.css";
 
 interface EventDetailsModalProps {
@@ -125,13 +125,20 @@ function isJunkLink(url: string) {
     );
 }
 
+function getProviderDisplayName(provider?: string) {
+    const normalized = (provider || "").toLowerCase();
+    if (normalized === "microsoft") return "Outlook";
+    if (!normalized) return "";
+    return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+}
+
 function ProviderLogo({ provider }: { provider?: string }) {
     const normalized = (provider || "").toLowerCase();
 
     if (normalized === "google") {
         return (
             <div className="event-provider-logo" aria-hidden="true">
-                <GoogleLogo className="event-provider-logo-svg" />
+                <ThirdPartyLogo name="google" className="event-provider-logo-svg" />
             </div>
         );
     }
@@ -139,7 +146,7 @@ function ProviderLogo({ provider }: { provider?: string }) {
     if (normalized === "microsoft") {
         return (
             <div className="event-provider-logo" aria-hidden="true">
-                <OutlookLogo className="event-provider-logo-svg" />
+                <ThirdPartyLogo name="outlook" className="event-provider-logo-svg" />
             </div>
         );
     }
@@ -232,7 +239,7 @@ export default function EventDetailsModal({
                             {extendedProps.provider && (
                                 <div className="event-provider-pill">
                                     <ProviderLogo provider={extendedProps.provider} />
-                                    <span>{extendedProps.provider}</span>
+                                    <span>{getProviderDisplayName(extendedProps.provider)}</span>
                                 </div>
                             )}
                         </div>
