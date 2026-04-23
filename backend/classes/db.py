@@ -5,6 +5,7 @@ import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 from contextlib import contextmanager
+from typing import Any
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -43,6 +44,19 @@ class OrdoDB:
                     allowed_providers TEXT DEFAULT '["google"]',
                     webhook_url TEXT,
                     created_at TEXT DEFAULT (datetime('now'))
+                );
+
+                CREATE TABLE IF NOT EXISTS users (
+                    id TEXT PRIMARY KEY,           -- same user_id string
+                    app_id TEXT NOT NULL REFERENCES ordo_apps(id),
+                    username TEXT NOT NULL,
+                    contact_email TEXT,
+                    contact_phone TEXT,
+                    sms_phone TEXT,
+                    ordo_number TEXT,
+                    timezone TEXT DEFAULT 'America/New_York',
+                    created_at TEXT DEFAULT (datetime('now')),
+                    UNIQUE(app_id, id)
                 );
 
                 CREATE TABLE IF NOT EXISTS calendar_integrations (
@@ -121,6 +135,65 @@ class OrdoDB:
                     colliding_events TEXT,
                     status TEXT DEFAULT 'pending',
                     resolution TEXT,
+                    created_at TEXT DEFAULT (datetime('now'))
+                );
+
+                CREATE TABLE IF NOT EXISTS working_hours (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT NOT NULL REFERENCES users(id),
+                    day_of_week INTEGER NOT NULL, -- 0=Mon, 6=Sun
+                    start_time TEXT NOT NULL,     -- 'HH:MM'
+                    end_time TEXT NOT NULL,       -- 'HH:MM'
+                    enabled BOOLEAN DEFAULT TRUE,
+                    UNIQUE(user_id, day_of_week)
+                );
+
+                CREATE TABLE IF NOT EXISTS event_types (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT NOT NULL REFERENCES users(id),
+                    slug TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    duration_minutes INTEGER NOT NULL,
+                    buffer_before INTEGER DEFAULT 0,
+                    buffer_after INTEGER DEFAULT 15,
+                    description TEXT,
+                    location TEXT,
+                    booking_window_days INTEGER DEFAULT 30,
+                    active BOOLEAN DEFAULT TRUE,
+                    created_at TEXT DEFAULT (datetime('now')),
+                    UNIQUE(user_id, slug)
+                );
+
+                CREATE TABLE IF NOT EXISTS bookings (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_type_id INTEGER REFERENCES event_types(id),
+                    user_id TEXT NOT NULL REFERENCES users(id),
+                    calendar_event_id TEXT,
+                    attendee_name TEXT NOT NULL,
+                    attendee_email TEXT NOT NULL,
+                    attendee_phone TEXT,
+                    sms_consent BOOLEAN DEFAULT FALSE,
+                    start_time TEXT NOT NULL,      -- UTC ISO8601
+                    end_time TEXT NOT NULL,        -- UTC ISO8601
+                    timezone TEXT NOT NULL,        -- attendee's timezone
+                    status TEXT DEFAULT 'confirmed',
+                    notes TEXT,
+                    created_at TEXT DEFAULT (datetime('now'))
+                );
+
+                CREATE TABLE IF NOT EXISTS scheduled_messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    booking_id INTEGER NOT NULL REFERENCES bookings(id),
+                    user_id TEXT NOT NULL REFERENCES users(id),
+                    recipient TEXT NOT NULL,       -- 'user' | 'attendee'
+                    phone TEXT NOT NULL,
+                    message_type TEXT NOT NULL,    -- 'confirmation' | 'reminder_24h' | 'reminder_1h' | 'no_show'
+                    body TEXT NOT NULL,
+                    send_at TEXT NOT NULL,         -- UTC ISO8601
+                    sent_at TEXT,
+                    status TEXT DEFAULT 'pending', -- pending | sent | failed | cancelled
+                    twilio_sid TEXT,
+                    retry_count INTEGER DEFAULT 0,
                     created_at TEXT DEFAULT (datetime('now'))
                 );
 
@@ -560,6 +633,92 @@ class OrdoDB:
             except (json.JSONDecodeError, TypeError):
                 pass
         return row
+
+    def get_user_by_username(self, username: str) -> dict | None:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM users WHERE username = ?", (username,)
+            ).fetchone()
+            return dict[Any, Any](row) if row else None
+
+    def get_user(self, user_id: str) -> dict | None:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM users WHERE id = ?", (user_id,)
+            ).fetchone()
+            return dict(row) if row else None
+
+    def get_event_type(self, user_id: str, slug: str) -> dict | None:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM event_types WHERE user_id = ? AND slug = ?",
+                (user_id, slug)
+            ).fetchone()
+            return dict(row) if row else None
+
+    def get_working_hours(self, user_id: str) -> list[dict]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM working_hours WHERE user_id = ? AND enabled = 1 ORDER BY day_of_week",
+                (user_id,)
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def create_booking(self, **kwargs) -> dict:
+        fields = ", ".join(kwargs.keys())
+        placeholders = ", ".join("?" * len(kwargs))
+        with self._conn() as conn:
+            conn.execute(
+                f"INSERT INTO bookings ({fields}) VALUES ({placeholders})",
+                tuple(kwargs.values())
+            )
+            row = conn.execute(
+                "SELECT * FROM bookings WHERE id = last_insert_rowid()"
+            ).fetchone()
+            return dict(row)
+
+    def create_scheduled_message(self, **kwargs) -> dict:
+        fields = ", ".join(kwargs.keys())
+        placeholders = ", ".join("?" * len(kwargs))
+        with self._conn() as conn:
+            conn.execute(
+                f"INSERT INTO scheduled_messages ({fields}) VALUES ({placeholders})",
+                tuple(kwargs.values())
+            )
+            row = conn.execute(
+                "SELECT * FROM scheduled_messages WHERE id = last_insert_rowid()"
+            ).fetchone()
+            return dict(row)
+
+    def get_pending_messages(self, before: str) -> list[dict]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                """SELECT sm.*, u.sms_phone, u.ordo_number
+                   FROM scheduled_messages sm
+                   JOIN users u ON u.id = sm.user_id
+                   WHERE sm.status = 'pending'
+                   AND sm.send_at <= ?
+                   ORDER BY sm.send_at ASC""",
+                (before,)
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def update_message_status(self, message_id: int, status: str,
+                              sent_at: str = None, twilio_sid: str = None,
+                              retry_count: int = None) -> None:
+        updates = {"status": status}
+        if sent_at:
+            updates["sent_at"] = sent_at
+        if twilio_sid:
+            updates["twilio_sid"] = twilio_sid
+        if retry_count is not None:
+            updates["retry_count"] = retry_count
+        sets = ", ".join(f"{k} = ?" for k in updates)
+        with self._conn() as conn:
+            conn.execute(
+                f"UPDATE scheduled_messages SET {sets} WHERE id = ?",
+                (*updates.values(), message_id)
+            )
 
     # -------------------------
     # Dev helpers

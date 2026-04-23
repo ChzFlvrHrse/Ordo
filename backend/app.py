@@ -1,8 +1,8 @@
-import os, logging
+import os, logging, asyncio
 from quart import Quart
 from quart_cors import cors
 from dotenv import load_dotenv
-from api.scheduler import scheduler
+from jobs import scheduler, run_worker
 # from modal import App, Image, Secret, asgi_app, fastapi_endpoint, Period
 
 # Blueprint imports
@@ -10,6 +10,7 @@ from api import (
     agent_bp,
     action_bp,
     integrations_bp,
+    scheduling_bp,
     google_calendar_bp,
     microsoft_calendar_bp,
 )
@@ -40,6 +41,7 @@ quart_app = cors(
 quart_app.register_blueprint(agent_bp)
 quart_app.register_blueprint(action_bp)
 quart_app.register_blueprint(integrations_bp)
+quart_app.register_blueprint(scheduling_bp)
 quart_app.register_blueprint(google_calendar_bp)
 quart_app.register_blueprint(microsoft_calendar_bp)
 
@@ -56,6 +58,7 @@ quart_app.register_blueprint(microsoft_calendar_bp)
 @quart_app.before_serving
 async def startup():
     scheduler.start()
+    asyncio.ensure_future(run_worker())
 
 @quart_app.after_serving
 async def shutdown():
