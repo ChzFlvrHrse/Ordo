@@ -1,16 +1,16 @@
 :root {
   /* ===== BACKGROUNDS ===== */
   --bg-main: #07111f;
-  --bg-shell-top: #273248;
-  --bg-shell-bottom: #22314a;
+  --bg-shell-top: #131c2d;
+  --bg-shell-bottom: #0e1525;
 
   --bg-card: #31415b;
   --bg-soft: #3a465e;
   --bg-hover: rgba(255, 255, 255, 0.08);
 
   /* ===== BORDERS ===== */
-  --border-soft: rgba(255, 255, 255, 0.06);
-  --border-light: rgba(255, 255, 255, 0.10);
+  --border-soft: rgba(255, 255, 255, 0.10);
+  --border-light: rgba(255, 255, 255, 0.15);
 
   /* ===== TEXT ===== */
   --text-primary: rgba(255, 255, 255, 0.92);
@@ -30,8 +30,8 @@
 
   /* ===== SIGNATURE COMBOS ===== */
   --shell-gradient:
-    radial-gradient(circle at bottom left, rgba(59, 130, 246, 0.18), transparent 30%),
-    radial-gradient(circle at top right, rgba(255, 255, 255, 0.03), transparent 35%),
+    radial-gradient(circle at bottom left, rgba(59, 130, 246, 0.12), transparent 28%),
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.03), transparent 32%),
     linear-gradient(180deg, var(--bg-shell-top) 0%, var(--bg-shell-bottom) 100%);
 
   --day-highlight-glow:
