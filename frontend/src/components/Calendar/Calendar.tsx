@@ -606,17 +606,17 @@ export default function Calendar({
                 const source = cellRect ?? fallback;
                 const rect = source
                   ? {
-                      top: source.top,
-                      left: source.left,
-                      width: source.width,
-                      height: source.height,
-                    }
+                    top: source.top,
+                    left: source.left,
+                    width: source.width,
+                    height: source.height,
+                  }
                   : {
-                      top: window.innerHeight / 2 - 60,
-                      left: window.innerWidth / 2 - 100,
-                      width: 200,
-                      height: 120,
-                    };
+                    top: window.innerHeight / 2 - 60,
+                    left: window.innerWidth / 2 - 100,
+                    width: 200,
+                    height: 120,
+                  };
                 const allEvents: ExpandedDayEvent[] = [
                   ...arg.allSegs.map((s) => ({
                     id: s.event.id,
