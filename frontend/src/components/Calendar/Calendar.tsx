@@ -4,7 +4,7 @@ import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import { DatesSetArg, EventClickArg, EventContentArg, MoreLinkArg } from "@fullcalendar/core";
-import { ChevronDown, Link2, Tag } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Link2, Tag } from "lucide-react";
 import toast from "react-hot-toast";
 import { OrdoEvent } from "../../hooks/useEvents";
 import { ThirdPartyLogo } from "../../logos";
@@ -343,29 +343,16 @@ export default function Calendar({
 
   return (
     <>
-      {showAuthModal === "google" && (
+      {(showAuthModal === "google" || showAuthModal === "microsoft") && (
         <CalendarAuthModal
-          provider="google"
+          provider={showAuthModal}
           loading={authLoading}
-          connected={googleConnected}
+          connected={showAuthModal === "google" ? googleConnected : outlookConnected}
           onClose={() => {
             setShowAuthModal(null);
             setAuthLoading(false);
           }}
-          onConnect={() => connectProvider("google")}
-        />
-      )}
-
-      {showAuthModal === "microsoft" && (
-        <CalendarAuthModal
-          provider="microsoft"
-          loading={authLoading}
-          connected={outlookConnected}
-          onClose={() => {
-            setShowAuthModal(null);
-            setAuthLoading(false);
-          }}
-          onConnect={() => connectProvider("microsoft")}
+          onConnect={() => connectProvider(showAuthModal)}
         />
       )}
 
@@ -397,8 +384,22 @@ export default function Calendar({
             </div>
 
             <div className="calendar-board-actions">
-              <button type="button" className="calendar-arrow-btn" onClick={handlePrev}>‹</button>
-              <button type="button" className="calendar-arrow-btn" onClick={handleNext}>›</button>
+              <button
+                type="button"
+                className="calendar-arrow-btn"
+                onClick={handlePrev}
+                aria-label="Previous"
+              >
+                <ChevronLeft size={18} strokeWidth={2.25} />
+              </button>
+              <button
+                type="button"
+                className="calendar-arrow-btn"
+                onClick={handleNext}
+                aria-label="Next"
+              >
+                <ChevronRight size={18} strokeWidth={2.25} />
+              </button>
             </div>
           </div>
 

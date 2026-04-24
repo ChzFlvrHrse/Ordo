@@ -115,10 +115,10 @@ export default function Layout() {
         </aside>
 
         <div className="layout-main-card">
-          <div className="layout-main-header">
+          {/* <div className="layout-main-header">
             <div>
               <h1 className="layout-title">Morning, Nate!</h1>
-              <p className="layout-subtitle">Here’s what’s on your agenda today.</p>
+              <p className="layout-subtitle">Here's what's on your agenda today.</p>
             </div>
 
             <div className="layout-header-actions">
@@ -130,7 +130,7 @@ export default function Layout() {
                 ✦
               </button>
             </div>
-          </div>
+          </div> */}
 
           <div className="layout-inner">
             <div className="layout-calendar">
