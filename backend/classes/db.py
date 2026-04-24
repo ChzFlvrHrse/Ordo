@@ -187,6 +187,7 @@ class OrdoDB:
                     user_id TEXT NOT NULL REFERENCES users(id),
                     recipient TEXT NOT NULL,       -- 'user' | 'attendee'
                     phone TEXT NOT NULL,
+                    email TEXT DEFAULT NULL,
                     message_type TEXT NOT NULL,    -- 'confirmation' | 'reminder_24h' | 'reminder_1h' | 'no_show'
                     body TEXT NOT NULL,
                     send_at TEXT NOT NULL,         -- UTC ISO8601
