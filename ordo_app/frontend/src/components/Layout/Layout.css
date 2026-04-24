@@ -1,0 +1,213 @@
+.layout {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    background: var(--bg-main);
+    user-select: none;
+    padding: 36px;
+  }
+
+  .layout-shell {
+    height: 100%;
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr);
+    border-radius: 34px;
+    overflow: hidden;
+    border: 1px solid var(--border-soft);
+    background: var(--shell-gradient);
+    box-shadow: 0 40px 120px rgba(0, 0, 0, 0.45);
+  }
+
+  .layout-sidebar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 12px;
+    gap: 20px;
+    border-right: 1px solid var(--border-soft);
+    background: var(--bg-shell-top);
+  }
+
+  .layout-brand-mark {
+    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+  }
+
+  .layout-sidebar-nav,
+  .layout-sidebar-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .layout-sidebar-nav {
+    margin-top: 24px;
+  }
+
+  .layout-sidebar-footer {
+    margin-top: auto;
+  }
+
+  .layout-sidebar-btn {
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    border-radius: 14px;
+    border: 1px solid var(--border-soft);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: transform 0.18s ease, background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+  }
+
+  .layout-sidebar-btn:hover {
+    transform: translateY(-1px);
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+  }
+
+  .layout-sidebar-btn.active {
+    background: linear-gradient(180deg, #4ca7ff 0%, #2c83ff 100%);
+    color: #fff;
+    box-shadow: 0 12px 30px rgba(59, 130, 246, 0.28);
+  }
+
+  .layout-avatar {
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    background: var(--logo-gradient);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    box-shadow: 0 8px 24px rgba(29, 78, 216, 0.25);
+  }
+
+  .layout-main-card {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    padding: 28px 28px 24px;
+  }
+
+  .layout-main-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    padding-bottom: 22px;
+  }
+
+  .layout-title {
+    font-size: 40px;
+    line-height: 1;
+    font-weight: 600;
+    letter-spacing: -0.04em;
+    color: var(--text-primary);
+  }
+
+  .layout-subtitle {
+    margin-top: 8px;
+    font-size: 15px;
+    color: var(--text-secondary);
+  }
+
+  .layout-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .layout-search-pill {
+    min-width: 260px;
+    height: 48px;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border-soft);
+    background: var(--bg-card);
+    padding: 0 16px;
+    color: var(--text-muted);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  }
+
+  .layout-search-icon {
+    font-size: 18px;
+    color: var(--text-secondary);
+  }
+
+  .layout-spark-btn {
+    width: 44px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    border: 1px solid var(--border-soft);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .layout-inner {
+    min-height: 0;
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  .layout-calendar {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  @media (max-width: 1280px) {
+    .layout {
+      padding: 20px;
+    }
+
+    .layout-main-card {
+      padding: 22px 22px 18px;
+    }
+
+    .layout-title {
+      font-size: 34px;
+    }
+  }
+
+  @media (max-width: 980px) {
+    .layout {
+      padding: 0;
+    }
+
+    .layout-shell {
+      border-radius: 0;
+      grid-template-columns: 1fr;
+    }
+
+    .layout-sidebar {
+      display: none;
+    }
+
+    .layout-main-header {
+      flex-direction: column;
+    }
+
+    .layout-header-actions {
+      width: 100%;
+    }
+
+    .layout-search-pill {
+      flex: 1;
+      min-width: 0;
+    }
+  }

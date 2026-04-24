@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+.venv/
+test.py
+
+# Env
+.env
+.env*.local
+
+# SQLite
+*.db
+
+# Node / React
+node_modules/
+.pnp
+.pnp.js
+.next/
+dist/
+build/
+coverage/
+.turbo/
+
+# Misc
+.DS_Store
+*.log
