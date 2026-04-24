@@ -92,6 +92,36 @@ async def schedule_sms_jobs(booking: dict, user: dict, event_type: dict):
             )
 
 
+@scheduling_bp.route("/event-types/<username>", methods=["GET"])
+async def get_event_types(username: str):
+    try:
+        user = db.get_user_by_username(username)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        event_types = db.get_event_types_by_user_id(user["id"])
+        return jsonify({
+            "success": True,
+            "host": {
+                "username": user["username"],
+                "timezone": user["timezone"],
+            },
+            "event_types": [
+                {
+                    "slug": et["slug"],
+                    "name": et["name"],
+                    "duration_minutes": et["duration_minutes"],
+                    "description": et.get("description"),
+                    "location": et.get("location"),
+                }
+                for et in event_types
+            ],
+        })
+    except Exception as e:
+        logger.error(f"get_event_types error: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
 @scheduling_bp.route("/availability/<username>/<slug>", methods=["GET"])
 async def get_availability(username: str, slug: str):
     try:

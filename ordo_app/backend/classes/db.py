@@ -657,6 +657,14 @@ class OrdoDB:
             ).fetchone()
             return dict(row) if row else None
 
+    def get_event_types_by_user_id(self, user_id: str) -> list[dict]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM event_types WHERE user_id = ? AND active = 1 ORDER BY duration_minutes, id",
+                (user_id,)
+            ).fetchall()
+            return [dict(r) for r in rows]
+
     def get_working_hours(self, user_id: str) -> list[dict]:
         with self._conn() as conn:
             rows = conn.execute(
